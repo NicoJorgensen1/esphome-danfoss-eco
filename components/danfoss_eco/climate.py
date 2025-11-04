@@ -84,22 +84,18 @@ CONFIG_SCHEMA = (
             }),
             cv.Optional(CONF_TEMPERATURE_MIN): number.number_schema(
                 unit_of_measurement=UNIT_CELSIUS,
-                accuracy_decimals=1,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_TEMPERATURE_MAX): number.number_schema(
                 unit_of_measurement=UNIT_CELSIUS,
-                accuracy_decimals=1,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_FROST_PROTECTION_TEMPERATURE): number.number_schema(
                 unit_of_measurement=UNIT_CELSIUS,
-                accuracy_decimals=1,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_VACATION_TEMPERATURE): number.number_schema(
                 unit_of_measurement=UNIT_CELSIUS,
-                accuracy_decimals=1,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_CHILD_SAFETY): switch.switch_schema(
