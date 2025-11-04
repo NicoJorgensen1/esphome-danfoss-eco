@@ -60,7 +60,8 @@ climate:
   - platform: danfoss_eco
     name: "Lille Badeværelse Danfoss ECO 2"
     ble_client_id: lille_badevaerelse_eco_client
-    secret_key: !secret lille_badevaerelse_danfoss_eco2_termostat
+    # secret_key will be read from device automatically - remove this line temporarily
+    # secret_key: !secret lille_badevaerelse_danfoss_eco2_termostat
     update_slot: 1  # Updates at :01, :13, :25, :37, :49 (minute % 12 == 1)
     max_thermostats: 5  # Must match across all thermostats
     battery_level:
