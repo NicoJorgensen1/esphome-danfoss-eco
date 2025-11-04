@@ -30,6 +30,8 @@ AUTO_LOAD = ["sensor", "binary_sensor", "esp32_ble_tracker"]
 CONF_PIN_CODE = 'pin_code'
 CONF_SECRET_KEY = 'secret_key'
 CONF_PROBLEMS = 'problems'
+CONF_UPDATE_SLOT = 'update_slot'
+CONF_MAX_THERMOSTATS = 'max_thermostats'
 CONF_TEMPERATURE_MIN = 'temperature_min'
 CONF_TEMPERATURE_MAX = 'temperature_max'
 CONF_FROST_PROTECTION_TEMPERATURE = 'frost_protection_temperature'
@@ -65,6 +67,8 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(DanfossEco),
             cv.Optional(CONF_SECRET_KEY): validate_secret,
             cv.Optional(CONF_PIN_CODE): validate_pin,
+            cv.Optional(CONF_UPDATE_SLOT): cv.int_range(min=0, max=4),
+            cv.Optional(CONF_MAX_THERMOSTATS, default=5): cv.int_range(min=1, max=10),
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement=UNIT_PERCENT,
                 accuracy_decimals=0,
@@ -136,6 +140,10 @@ async def to_code(config):
     
     cg.add(var.set_secret_key(config.get(CONF_SECRET_KEY, "")))
     cg.add(var.set_pin_code(config.get(CONF_PIN_CODE, "")))
+    
+    if CONF_UPDATE_SLOT in config:
+        cg.add(var.set_update_slot(config[CONF_UPDATE_SLOT]))
+    cg.add(var.set_max_thermostats(config.get(CONF_MAX_THERMOSTATS, 5)))
     
     if CONF_BATTERY_LEVEL in config:
         sens = await sensor.new_sensor(config[CONF_BATTERY_LEVEL])

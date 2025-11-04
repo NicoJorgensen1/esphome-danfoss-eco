@@ -45,6 +45,8 @@ namespace esphome
 
       void set_secret_key(const string &);
       void set_pin_code(const string &);
+      void set_update_slot(uint8_t slot) { update_slot_ = slot; }
+      void set_max_thermostats(uint8_t max) { max_thermostats_ = max; }
       
       // Temporarily disabled - focus on basic temperature control first
       // void write_temperature_min(float value);
@@ -80,6 +82,8 @@ namespace esphome
     private:
       ESPPreferenceObject secret_pref_;
       uint32_t pin_code_ = 0;
+      uint8_t update_slot_ = 0;      // Slot index (0-4 for 5 thermostats)
+      uint8_t max_thermostats_ = 5;   // Maximum number of thermostats
 
       uint8_t request_counter_ = 0;
       CommandQueue commands_;

@@ -2,6 +2,7 @@
 
 #ifdef USE_ESP32
 #include "esphome/core/version.h"
+#include <ctime>
 
 namespace esphome
 {
@@ -56,6 +57,29 @@ namespace esphome
 
     void Device::update()
     {
+      // Check if it's time for this thermostat to update based on minute-based scheduling
+      if (this->max_thermostats_ > 1)
+      {
+        time_t now = time(nullptr);
+        struct tm *timeinfo = localtime(&now);
+        int current_minute = timeinfo->tm_min;
+        
+        // Calculate interval: 60 minutes / max_thermostats (e.g., 60/5 = 12 minutes)
+        int interval_minutes = 60 / this->max_thermostats_;
+        
+        // Check if current minute matches this thermostat's slot
+        // e.g., for 5 thermostats with 12min interval:
+        //   Slot 0: updates at :00, :12, :24, :36, :48 (minute % 12 == 0)
+        //   Slot 1: updates at :01, :13, :25, :37, :49 (minute % 12 == 1)
+        //   etc.
+        if ((current_minute % interval_minutes) != this->update_slot_)
+        {
+          ESP_LOGD(TAG, "[%s] skipping update - not this thermostat's slot (current minute: %d, slot: %d, interval: %d)", 
+                   this->get_name().c_str(), current_minute, this->update_slot_, interval_minutes);
+          return;
+        }
+      }
+
       this->connect();
 
       if (this->xxtea->status() == XXTEA_STATUS_SUCCESS)

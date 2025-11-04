@@ -30,7 +30,7 @@ external_components:
 
 esp32_ble:
   id: ble_stack
-  max_connections: 1
+  max_connections: 5  # Support up to 5 thermostats
 
 esp32_ble_tracker:
   scan_parameters:
@@ -39,18 +39,57 @@ esp32_ble_tracker:
 ble_client:
   - mac_address: "00:04:2f:6a:77:63"
     id: kaelder_eco_client
+  - mac_address: "00:04:2F:6A:B7:12"
+    id: lille_badevaerelse_eco_client
 
 climate:
   - platform: danfoss_eco
     name: "Basement Danfoss ECO 2"
     ble_client_id: kaelder_eco_client
     secret_key: !secret kaelder_danfoss_eco2_termostat
+    update_slot: 0  # Updates at :00, :12, :24, :36, :48 (minute % 12 == 0)
+    max_thermostats: 5  # Total number of thermostats on this ESP32
     battery_level:
       name: "Basement Danfoss ECO 2 Battery Level"
     temperature:
       name: "Basement Danfoss ECO 2 Temperature"
     problems:
       name: "Basement Danfoss ECO 2 Problems"
+    update_interval: 12min  # Polling interval (but actual update happens at slot time)
+
+  - platform: danfoss_eco
+    name: "Lille Badeværelse Danfoss ECO 2"
+    ble_client_id: lille_badevaerelse_eco_client
+    secret_key: !secret lille_badevaerelse_danfoss_eco2_termostat
+    update_slot: 1  # Updates at :01, :13, :25, :37, :49 (minute % 12 == 1)
+    max_thermostats: 5  # Must match across all thermostats
+    battery_level:
+      name: "Lille Badeværelse Danfoss ECO 2 Battery Level"
+    temperature:
+      name: "Lille Badeværelse Danfoss ECO 2 Temperature"
+    problems:
+      name: "Lille Badeværelse Danfoss ECO 2 Problems"
+    update_interval: 12min  # Polling interval (but actual update happens at slot time)
+
+  # Template for adding more thermostats (up to 5 total):
+  # - platform: danfoss_eco
+  #   name: "Room 3 Danfoss ECO 2"
+  #   ble_client_id: room3_eco_client
+  #   secret_key: !secret room3_danfoss_eco2_termostat
+  #   update_slot: 2  # Updates at :02, :14, :26, :38, :50 (minute % 12 == 2)
+  #   max_thermostats: 5  # Must match across all thermostats
+  #   battery_level:
+  #     name: "Room 3 Danfoss ECO 2 Battery Level"
+  #   temperature:
+  #     name: "Room 3 Danfoss ECO 2 Temperature"
+  #   problems:
+  #     name: "Room 3 Danfoss ECO 2 Problems"
+  #   update_interval: 12min
+  # 
+  # Thermostat 4: update_slot: 3 (updates at :03, :15, :27, :39, :51)
+  # Thermostat 5: update_slot: 4 (updates at :04, :16, :28, :40, :52)
+
+
     # Temporarily disabled advanced features - will be re-enabled later
     # temperature_min:
     #   name: "Basement Danfoss ECO 2 Min Temperature"
@@ -66,4 +105,3 @@ climate:
     #   name: "Basement Danfoss ECO 2 Adaptive Learning"
     # mac_address:
     #   name: "Basement Danfoss ECO 2 MAC Address"
-    update_interval: 15min
