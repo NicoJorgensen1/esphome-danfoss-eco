@@ -24,7 +24,8 @@ from esphome.const import (
 CODEOWNERS = ["@dmitry-cherkas"]
 DEPENDENCIES = ["ble_client"]
 # load zero-configuration dependencies automatically
-AUTO_LOAD = ["sensor", "binary_sensor", "esp32_ble_tracker", "number", "switch"]
+AUTO_LOAD = ["sensor", "binary_sensor", "esp32_ble_tracker"]
+# AUTO_LOAD = ["sensor", "binary_sensor", "esp32_ble_tracker", "number", "switch"]  # Temporarily disabled
 
 CONF_PIN_CODE = 'pin_code'
 CONF_SECRET_KEY = 'secret_key'
@@ -82,37 +83,39 @@ CONFIG_SCHEMA = (
                 cv.Optional(CONF_ENTITY_CATEGORY, default=ENTITY_CATEGORY_DIAGNOSTIC): cv.entity_category,
                 cv.Optional(CONF_DEVICE_CLASS, default=DEVICE_CLASS_PROBLEM): binary_sensor.validate_device_class
             }),
-            cv.Optional(CONF_TEMPERATURE_MIN): number.number_schema(
-                number.Number,
-                unit_of_measurement=UNIT_CELSIUS,
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
-            cv.Optional(CONF_TEMPERATURE_MAX): number.number_schema(
-                number.Number,
-                unit_of_measurement=UNIT_CELSIUS,
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
-            cv.Optional(CONF_FROST_PROTECTION_TEMPERATURE): number.number_schema(
-                number.Number,
-                unit_of_measurement=UNIT_CELSIUS,
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
-            cv.Optional(CONF_VACATION_TEMPERATURE): number.number_schema(
-                number.Number,
-                unit_of_measurement=UNIT_CELSIUS,
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
-            cv.Optional(CONF_CHILD_SAFETY): switch.switch_schema(
-                switch.Switch,
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
-            cv.Optional(CONF_ADAPTIVE_LEARNING): switch.switch_schema(
-                switch.Switch,
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
-            cv.Optional(CONF_MAC_ADDRESS): sensor.sensor_schema(
-                entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-            ),
+            # Temporarily disabled advanced features - focus on basic temperature control first
+            # cv.Optional(CONF_TEMPERATURE_MIN): number.number_schema(
+            #     number.Number,
+            #     unit_of_measurement=UNIT_CELSIUS,
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
+            # cv.Optional(CONF_TEMPERATURE_MAX): number.number_schema(
+            #     number.Number,
+            #     unit_of_measurement=UNIT_CELSIUS,
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
+            # cv.Optional(CONF_FROST_PROTECTION_TEMPERATURE): number.number_schema(
+            #     number.Number,
+            #     unit_of_measurement=UNIT_CELSIUS,
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
+            # cv.Optional(CONF_VACATION_TEMPERATURE): number.number_schema(
+            #     number.Number,
+            #     unit_of_measurement=UNIT_CELSIUS,
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
+            # cv.Optional(CONF_CHILD_SAFETY): switch.switch_schema(
+            #     switch.Switch,
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
+            # cv.Optional(CONF_ADAPTIVE_LEARNING): switch.switch_schema(
+            #     switch.Switch,
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
+            # Temporarily disabled MAC address sensor - sensors expect float, not string
+            # cv.Optional(CONF_MAC_ADDRESS): sensor.sensor_schema(
+            #     entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+            # ),
             cv.Optional(CONF_HARDWARE_REVISION): sensor.sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
@@ -144,45 +147,37 @@ async def to_code(config):
         b_sens = await binary_sensor.new_binary_sensor(config[CONF_PROBLEMS])
         cg.add(var.set_problems(b_sens))
     
-    if CONF_TEMPERATURE_MIN in config:
-        num = await number.new_number(config[CONF_TEMPERATURE_MIN], min_value=5.0, max_value=30.0, step=0.5)
-        cg.add(var.set_temperature_min(num))
-        templ = cg.RawExpression("[{}](float value) {{ {}->write_temperature_min(value); }}".format(var, var))
-        cg.add(num.add_on_state_callback(templ))
+    # Temporarily disabled advanced features - focus on basic temperature control first
+    # These will be re-enabled once we figure out the proper callback registration
+    # if CONF_TEMPERATURE_MIN in config:
+    #     num = await number.new_number(config[CONF_TEMPERATURE_MIN], min_value=5.0, max_value=30.0, step=0.5)
+    #     cg.add(var.set_temperature_min(num))
+    # 
+    # if CONF_TEMPERATURE_MAX in config:
+    #     num = await number.new_number(config[CONF_TEMPERATURE_MAX], min_value=5.0, max_value=30.0, step=0.5)
+    #     cg.add(var.set_temperature_max(num))
+    # 
+    # if CONF_FROST_PROTECTION_TEMPERATURE in config:
+    #     num = await number.new_number(config[CONF_FROST_PROTECTION_TEMPERATURE], min_value=5.0, max_value=10.0, step=0.5)
+    #     cg.add(var.set_frost_protection_temperature(num))
+    # 
+    # if CONF_VACATION_TEMPERATURE in config:
+    #     num = await number.new_number(config[CONF_VACATION_TEMPERATURE], min_value=5.0, max_value=20.0, step=0.5)
+    #     cg.add(var.set_vacation_temperature(num))
+    # 
+    # if CONF_CHILD_SAFETY in config:
+    #     sw = await switch.new_switch(config[CONF_CHILD_SAFETY])
+    #     cg.add(var.set_child_safety(sw))
+    # 
+    # if CONF_ADAPTIVE_LEARNING in config:
+    #     sw = await switch.new_switch(config[CONF_ADAPTIVE_LEARNING])
+    #     cg.add(var.set_adaptive_learning(sw))
     
-    if CONF_TEMPERATURE_MAX in config:
-        num = await number.new_number(config[CONF_TEMPERATURE_MAX], min_value=5.0, max_value=30.0, step=0.5)
-        cg.add(var.set_temperature_max(num))
-        templ = cg.RawExpression("[{}](float value) {{ {}->write_temperature_max(value); }}".format(var, var))
-        cg.add(num.add_on_state_callback(templ))
-    
-    if CONF_FROST_PROTECTION_TEMPERATURE in config:
-        num = await number.new_number(config[CONF_FROST_PROTECTION_TEMPERATURE], min_value=5.0, max_value=10.0, step=0.5)
-        cg.add(var.set_frost_protection_temperature(num))
-        templ = cg.RawExpression("[{}](float value) {{ {}->write_frost_protection_temperature(value); }}".format(var, var))
-        cg.add(num.add_on_state_callback(templ))
-    
-    if CONF_VACATION_TEMPERATURE in config:
-        num = await number.new_number(config[CONF_VACATION_TEMPERATURE], min_value=5.0, max_value=20.0, step=0.5)
-        cg.add(var.set_vacation_temperature(num))
-        templ = cg.RawExpression("[{}](float value) {{ {}->write_vacation_temperature(value); }}".format(var, var))
-        cg.add(num.add_on_state_callback(templ))
-    
-    if CONF_CHILD_SAFETY in config:
-        sw = await switch.new_switch(config[CONF_CHILD_SAFETY])
-        cg.add(var.set_child_safety(sw))
-        templ = cg.RawExpression("[{}](bool value) {{ {}->write_child_safety(value); }}".format(var, var))
-        cg.add(sw.add_on_state_callback(templ))
-    
-    if CONF_ADAPTIVE_LEARNING in config:
-        sw = await switch.new_switch(config[CONF_ADAPTIVE_LEARNING])
-        cg.add(var.set_adaptive_learning(sw))
-        templ = cg.RawExpression("[{}](bool value) {{ {}->write_adaptive_learning(value); }}".format(var, var))
-        cg.add(sw.add_on_state_callback(templ))
-    
-    if CONF_MAC_ADDRESS in config:
-        sens = await sensor.new_sensor(config[CONF_MAC_ADDRESS])
-        cg.add(var.set_mac_address(sens))
+    # Temporarily disabled MAC address sensor - sensors expect float, not string
+    # Would need text_sensor instead
+    # if CONF_MAC_ADDRESS in config:
+    #     sens = await sensor.new_sensor(config[CONF_MAC_ADDRESS])
+    #     cg.add(var.set_mac_address(sens))
     
     if CONF_HARDWARE_REVISION in config:
         sens = await sensor.new_sensor(config[CONF_HARDWARE_REVISION])
