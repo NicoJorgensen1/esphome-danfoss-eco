@@ -103,9 +103,11 @@ CONFIG_SCHEMA = (
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_CHILD_SAFETY): switch.switch_schema(
+                switch.Switch,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_ADAPTIVE_LEARNING): switch.switch_schema(
+                switch.Switch,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_MAC_ADDRESS): sensor.sensor_schema(
