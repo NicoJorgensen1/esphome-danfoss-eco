@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/log.h"
+#include <ctime>
 
 #include "helpers.h"
 #include "xxtea.h"
@@ -77,6 +78,7 @@ namespace esphome
             void set_lock_control(bool state) { set_bit(this->settings_[0], 7, state); }
 
             ClimateMode device_mode;
+            DeviceMode raw_device_mode; // Store raw mode for writing
 
             float temperature_min;
             float temperature_max;
@@ -96,7 +98,9 @@ namespace esphome
                 this->temperature_min = settings[1] / 2.0f;
                 this->temperature_max = settings[2] / 2.0f;
                 this->frost_protection_temperature = settings[3] / 2.0f;
-                this->device_mode = to_climate_mode((DeviceMode)settings[4]);
+                DeviceMode mode = (DeviceMode)settings[4];
+                this->raw_device_mode = mode;
+                this->device_mode = to_climate_mode(mode);
                 this->vacation_temperature = settings[5] / 2.0f;
 
                 this->vacation_from = parse_int(settings, 6);
@@ -114,6 +118,8 @@ namespace esphome
                     return ClimateMode::CLIMATE_MODE_HEAT;
 
                 case SCHEDULED:
+                    return ClimateMode::CLIMATE_MODE_AUTO;
+
                 case VACATION:
                     return ClimateMode::CLIMATE_MODE_AUTO;
 
@@ -130,10 +136,20 @@ namespace esphome
                 buff[1] = (uint8_t)(this->temperature_min * 2);
                 buff[2] = (uint8_t)(this->temperature_max * 2);
                 buff[3] = (uint8_t)(this->frost_protection_temperature * 2);
-                if (this->device_mode == ClimateMode::CLIMATE_MODE_AUTO)
+                
+                // Handle device mode - preserve vacation mode if set
+                if (this->raw_device_mode == DeviceMode::VACATION)
+                {
+                    buff[4] = DeviceMode::VACATION;
+                }
+                else if (this->device_mode == ClimateMode::CLIMATE_MODE_AUTO)
+                {
                     buff[4] = DeviceMode::SCHEDULED;
+                }
                 else
+                {
                     buff[4] = DeviceMode::MANUAL;
+                }
                 buff[5] = (uint8_t)(this->vacation_temperature * 2);
 
                 write_int(buff, 6, this->vacation_from);

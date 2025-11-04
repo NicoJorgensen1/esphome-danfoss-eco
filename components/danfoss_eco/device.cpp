@@ -22,6 +22,12 @@ namespace esphome
       // pretend, we have already discovered the device
       copy_address(this->parent()->get_address(), this->parent()->get_remote_bda());
       this->parent()->set_state(ClientState::INIT);
+      
+      // Initialize MAC address sensor if configured
+      if (this->mac_address_ != nullptr)
+      {
+        this->mac_address_->publish_state(this->parent()->address_str());
+      }
     }
 
     void Device::loop()
@@ -81,16 +87,136 @@ namespace esphome
       if (call.get_mode().has_value())
       {
         SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-        s_data.device_mode = *call.get_mode();
+        ClimateMode requested_mode = *call.get_mode();
+        
+        // Handle vacation preset
+        if (call.get_preset().has_value() && *call.get_preset() == ClimatePreset::CLIMATE_PRESET_VACATION)
+        {
+          s_data.raw_device_mode = SettingsData::DeviceMode::VACATION;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+        }
+        else if (requested_mode == ClimateMode::CLIMATE_MODE_AUTO)
+        {
+          s_data.raw_device_mode = SettingsData::DeviceMode::SCHEDULED;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+        }
+        else if (requested_mode == ClimateMode::CLIMATE_MODE_HEAT)
+        {
+          s_data.raw_device_mode = SettingsData::DeviceMode::MANUAL;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_HEAT;
+        }
+        else
+        {
+          s_data.raw_device_mode = SettingsData::DeviceMode::MANUAL;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_HEAT;
+        }
 
         // update state immediately to avoid delays in HA UI
         this->mode = s_data.device_mode;
+        if (call.get_preset().has_value())
+          this->preset = *call.get_preset();
         this->publish_state();
 
         this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
         // initiate connection to the device
         this->connect();
       }
+      
+      if (call.get_preset().has_value())
+      {
+        SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+        
+        if (*call.get_preset() == ClimatePreset::CLIMATE_PRESET_VACATION)
+        {
+          s_data.raw_device_mode = SettingsData::DeviceMode::VACATION;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+        }
+        else
+        {
+          // For other presets, use scheduled mode
+          s_data.raw_device_mode = SettingsData::DeviceMode::SCHEDULED;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+        }
+        
+        this->preset = *call.get_preset();
+        this->mode = s_data.device_mode;
+        this->publish_state();
+        
+        this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+        this->connect();
+      }
+    }
+
+    void Device::write_temperature_min(float value)
+    {
+      if (this->p_settings->data == nullptr)
+        return;
+      
+      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+      s_data.temperature_min = value;
+      
+      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+      this->connect();
+    }
+
+    void Device::write_temperature_max(float value)
+    {
+      if (this->p_settings->data == nullptr)
+        return;
+      
+      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+      s_data.temperature_max = value;
+      
+      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+      this->connect();
+    }
+
+    void Device::write_frost_protection_temperature(float value)
+    {
+      if (this->p_settings->data == nullptr)
+        return;
+      
+      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+      s_data.frost_protection_temperature = value;
+      
+      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+      this->connect();
+    }
+
+    void Device::write_vacation_temperature(float value)
+    {
+      if (this->p_settings->data == nullptr)
+        return;
+      
+      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+      s_data.vacation_temperature = value;
+      
+      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+      this->connect();
+    }
+
+    void Device::write_child_safety(bool state)
+    {
+      if (this->p_settings->data == nullptr)
+        return;
+      
+      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+      s_data.set_lock_control(state);
+      
+      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+      this->connect();
+    }
+
+    void Device::write_adaptive_learning(bool state)
+    {
+      if (this->p_settings->data == nullptr)
+        return;
+      
+      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+      s_data.set_adaptable_regulation(state);
+      
+      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+      this->connect();
     }
 
     void Device::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)

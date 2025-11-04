@@ -56,9 +56,12 @@ namespace esphome
 
         bool parse_bit(uint16_t data, int pos) { return (data & (1 << pos)) >> pos; }
 
-        void set_bit(uint8_t data, int pos, bool value)
+        void set_bit(uint8_t &data, int pos, bool value)
         {
-            data ^= (-value ^ data) & (1UL << pos);
+            if (value)
+                data |= (1UL << pos);
+            else
+                data &= ~(1UL << pos);
         }
 
         void reverse_chunks(uint8_t *data, int len, uint8_t *reversed_buff)

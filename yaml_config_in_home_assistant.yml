@@ -1,0 +1,68 @@
+esphome:
+  name: danfoss-eco-kaelder
+  comment: Danfoss ECO 2 Basement Thermostat Control
+  libraries:
+    - xxtea-iot-crypt@2.0.1
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: INFO
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Danfoss ECO 2 Basement Fallback"
+    password: "fallback123"
+
+api:
+
+ota:
+  platform: esphome
+
+external_components:
+  - source: github://NicoJorgensen1/esphome-danfoss-eco@master
+    refresh: 0s
+
+esp32_ble:
+  id: ble_stack
+  max_connections: 1
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+ble_client:
+  - mac_address: "00:04:2f:6a:77:63"
+    id: kaelder_eco_client
+
+climate:
+  - platform: danfoss_eco
+    name: "Basement Danfoss ECO 2"
+    ble_client_id: kaelder_eco_client
+    secret_key: !secret kaelder_danfoss_eco2_termostat
+    battery_level:
+      name: "Basement Danfoss ECO 2 Battery Level"
+    temperature:
+      name: "Basement Danfoss ECO 2 Temperature"
+    problems:
+      name: "Basement Danfoss ECO 2 Problems"
+    temperature_min:
+      name: "Basement Danfoss ECO 2 Min Temperature"
+    temperature_max:
+      name: "Basement Danfoss ECO 2 Max Temperature"
+    frost_protection_temperature:
+      name: "Basement Danfoss ECO 2 Frost Protection"
+    vacation_temperature:
+      name: "Basement Danfoss ECO 2 Vacation Temperature"
+    child_safety:
+      name: "Basement Danfoss ECO 2 Child Safety"
+    adaptive_learning:
+      name: "Basement Danfoss ECO 2 Adaptive Learning"
+    mac_address:
+      name: "Basement Danfoss ECO 2 MAC Address"
+    update_interval: 15min
