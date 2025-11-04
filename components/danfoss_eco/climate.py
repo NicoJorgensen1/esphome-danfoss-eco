@@ -83,18 +83,22 @@ CONFIG_SCHEMA = (
                 cv.Optional(CONF_DEVICE_CLASS, default=DEVICE_CLASS_PROBLEM): binary_sensor.validate_device_class
             }),
             cv.Optional(CONF_TEMPERATURE_MIN): number.number_schema(
+                number.Number,
                 unit_of_measurement=UNIT_CELSIUS,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_TEMPERATURE_MAX): number.number_schema(
+                number.Number,
                 unit_of_measurement=UNIT_CELSIUS,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_FROST_PROTECTION_TEMPERATURE): number.number_schema(
+                number.Number,
                 unit_of_measurement=UNIT_CELSIUS,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
             cv.Optional(CONF_VACATION_TEMPERATURE): number.number_schema(
+                number.Number,
                 unit_of_measurement=UNIT_CELSIUS,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC
             ),
