@@ -23,11 +23,8 @@ namespace esphome
       copy_address(this->parent()->get_address(), this->parent()->get_remote_bda());
       this->parent()->set_state(ClientState::INIT);
       
-      // Initialize MAC address sensor if configured
-      if (this->mac_address_ != nullptr)
-      {
-        this->mac_address_->publish_state(this->parent()->address_str());
-      }
+      // MAC address is available via parent()->address_str() but sensors expect float
+      // For now, MAC address sensor is not populated (would need text_sensor)
     }
 
     void Device::loop()
@@ -89,11 +86,21 @@ namespace esphome
         SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
         ClimateMode requested_mode = *call.get_mode();
         
-        // Handle vacation preset
-        if (call.get_preset().has_value() && *call.get_preset() == ClimatePreset::CLIMATE_PRESET_VACATION)
+        // Handle vacation preset - use AWAY preset as vacation indicator
+        if (call.get_preset().has_value() && *call.get_preset() == ClimatePreset::CLIMATE_PRESET_AWAY && 
+            this->preset == ClimatePreset::CLIMATE_PRESET_AWAY)
         {
-          s_data.raw_device_mode = SettingsData::DeviceMode::VACATION;
-          s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+          // Check if vacation temperature is set - if so, treat as vacation mode
+          if (s_data.vacation_temperature > 0 && s_data.vacation_temperature < 20.0)
+          {
+            s_data.raw_device_mode = SettingsData::DeviceMode::VACATION;
+            s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+          }
+          else
+          {
+            s_data.raw_device_mode = SettingsData::DeviceMode::SCHEDULED;
+            s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+          }
         }
         else if (requested_mode == ClimateMode::CLIMATE_MODE_AUTO)
         {
@@ -126,14 +133,22 @@ namespace esphome
       {
         SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
         
-        if (*call.get_preset() == ClimatePreset::CLIMATE_PRESET_VACATION)
+        // Use AWAY preset as vacation mode indicator when vacation temp is set
+        if (*call.get_preset() == ClimatePreset::CLIMATE_PRESET_AWAY && 
+            s_data.vacation_temperature > 0 && s_data.vacation_temperature < 20.0)
         {
           s_data.raw_device_mode = SettingsData::DeviceMode::VACATION;
           s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
         }
+        else if (*call.get_preset() == ClimatePreset::CLIMATE_PRESET_SLEEP)
+        {
+          // Sleep mode - use scheduled with lower temp
+          s_data.raw_device_mode = SettingsData::DeviceMode::SCHEDULED;
+          s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
+        }
         else
         {
-          // For other presets, use scheduled mode
+          // For HOME and other presets, use scheduled mode
           s_data.raw_device_mode = SettingsData::DeviceMode::SCHEDULED;
           s_data.device_mode = ClimateMode::CLIMATE_MODE_AUTO;
         }

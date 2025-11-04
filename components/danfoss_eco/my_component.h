@@ -31,7 +31,8 @@ namespace esphome
                 traits.set_supports_current_temperature(true);
 
                 traits.set_supported_modes(set<ClimateMode>({ClimateMode::CLIMATE_MODE_HEAT, ClimateMode::CLIMATE_MODE_AUTO, ClimateMode::CLIMATE_MODE_OFF}));
-                traits.set_supported_presets({ClimatePreset::CLIMATE_PRESET_HOME, ClimatePreset::CLIMATE_PRESET_AWAY, ClimatePreset::CLIMATE_PRESET_SLEEP, ClimatePreset::CLIMATE_PRESET_VACATION});
+                set<ClimatePreset> presets = {ClimatePreset::CLIMATE_PRESET_HOME, ClimatePreset::CLIMATE_PRESET_AWAY, ClimatePreset::CLIMATE_PRESET_SLEEP};
+                traits.set_supported_presets(presets);
                 traits.set_visual_temperature_step(0.5);
 
                 traits.set_supports_current_temperature(true); // supports reporting current temperature

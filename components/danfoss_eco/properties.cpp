@@ -128,7 +128,8 @@ namespace esphome
             // Update preset based on device mode
             if (s_data->raw_device_mode == SettingsData::DeviceMode::VACATION)
             {
-                this->component_->preset = ClimatePreset::CLIMATE_PRESET_VACATION;
+                // Use AWAY preset to represent vacation mode
+                this->component_->preset = ClimatePreset::CLIMATE_PRESET_AWAY;
             }
             else if (s_data->raw_device_mode == SettingsData::DeviceMode::SCHEDULED)
             {
