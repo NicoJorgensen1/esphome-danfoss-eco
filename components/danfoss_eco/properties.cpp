@@ -106,21 +106,22 @@ namespace esphome
             ESP_LOGD(TAG, "[%s] vacation_from: %d", name, (int)s_data->vacation_from);
             ESP_LOGD(TAG, "[%s] vacation_to: %d", name, (int)s_data->vacation_to);
 
+            // Temporarily disabled - focus on basic temperature control first
             // Update number sensors
-            if (this->component_->temperature_min() != nullptr)
-                this->component_->temperature_min()->publish_state(s_data->temperature_min);
-            if (this->component_->temperature_max() != nullptr)
-                this->component_->temperature_max()->publish_state(s_data->temperature_max);
-            if (this->component_->frost_protection_temperature() != nullptr)
-                this->component_->frost_protection_temperature()->publish_state(s_data->frost_protection_temperature);
-            if (this->component_->vacation_temperature() != nullptr)
-                this->component_->vacation_temperature()->publish_state(s_data->vacation_temperature);
+            // if (this->component_->temperature_min() != nullptr)
+            //     this->component_->temperature_min()->publish_state(s_data->temperature_min);
+            // if (this->component_->temperature_max() != nullptr)
+            //     this->component_->temperature_max()->publish_state(s_data->temperature_max);
+            // if (this->component_->frost_protection_temperature() != nullptr)
+            //     this->component_->frost_protection_temperature()->publish_state(s_data->frost_protection_temperature);
+            // if (this->component_->vacation_temperature() != nullptr)
+            //     this->component_->vacation_temperature()->publish_state(s_data->vacation_temperature);
 
             // Update switches
-            if (this->component_->child_safety() != nullptr)
-                this->component_->child_safety()->publish_state(s_data->get_lock_control());
-            if (this->component_->adaptive_learning() != nullptr)
-                this->component_->adaptive_learning()->publish_state(s_data->get_adaptable_regulation());
+            // if (this->component_->child_safety() != nullptr)
+            //     this->component_->child_safety()->publish_state(s_data->get_lock_control());
+            // if (this->component_->adaptive_learning() != nullptr)
+            //     this->component_->adaptive_learning()->publish_state(s_data->get_adaptable_regulation());
 
             // apply read configuration to the component
             this->component_->mode = s_data->device_mode;

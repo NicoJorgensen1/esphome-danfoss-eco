@@ -51,18 +51,19 @@ climate:
       name: "Basement Danfoss ECO 2 Temperature"
     problems:
       name: "Basement Danfoss ECO 2 Problems"
-    temperature_min:
-      name: "Basement Danfoss ECO 2 Min Temperature"
-    temperature_max:
-      name: "Basement Danfoss ECO 2 Max Temperature"
-    frost_protection_temperature:
-      name: "Basement Danfoss ECO 2 Frost Protection"
-    vacation_temperature:
-      name: "Basement Danfoss ECO 2 Vacation Temperature"
-    child_safety:
-      name: "Basement Danfoss ECO 2 Child Safety"
-    adaptive_learning:
-      name: "Basement Danfoss ECO 2 Adaptive Learning"
-    mac_address:
-      name: "Basement Danfoss ECO 2 MAC Address"
+    # Temporarily disabled advanced features - will be re-enabled later
+    # temperature_min:
+    #   name: "Basement Danfoss ECO 2 Min Temperature"
+    # temperature_max:
+    #   name: "Basement Danfoss ECO 2 Max Temperature"
+    # frost_protection_temperature:
+    #   name: "Basement Danfoss ECO 2 Frost Protection"
+    # vacation_temperature:
+    #   name: "Basement Danfoss ECO 2 Vacation Temperature"
+    # child_safety:
+    #   name: "Basement Danfoss ECO 2 Child Safety"
+    # adaptive_learning:
+    #   name: "Basement Danfoss ECO 2 Adaptive Learning"
+    # mac_address:
+    #   name: "Basement Danfoss ECO 2 MAC Address"
     update_interval: 15min

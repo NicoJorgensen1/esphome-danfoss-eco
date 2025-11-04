@@ -162,77 +162,78 @@ namespace esphome
       }
     }
 
-    void Device::write_temperature_min(float value)
-    {
-      if (this->p_settings->data == nullptr)
-        return;
-      
-      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-      s_data.temperature_min = value;
-      
-      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-      this->connect();
-    }
+    // Temporarily disabled - focus on basic temperature control first
+    // void Device::write_temperature_min(float value)
+    // {
+    //   if (this->p_settings->data == nullptr)
+    //     return;
+    //   
+    //   SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+    //   s_data.temperature_min = value;
+    //   
+    //   this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+    //   this->connect();
+    // }
 
-    void Device::write_temperature_max(float value)
-    {
-      if (this->p_settings->data == nullptr)
-        return;
-      
-      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-      s_data.temperature_max = value;
-      
-      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-      this->connect();
-    }
+    // void Device::write_temperature_max(float value)
+    // {
+    //   if (this->p_settings->data == nullptr)
+    //     return;
+    //   
+    //   SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+    //   s_data.temperature_max = value;
+    //   
+    //   this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+    //   this->connect();
+    // }
 
-    void Device::write_frost_protection_temperature(float value)
-    {
-      if (this->p_settings->data == nullptr)
-        return;
-      
-      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-      s_data.frost_protection_temperature = value;
-      
-      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-      this->connect();
-    }
+    // void Device::write_frost_protection_temperature(float value)
+    // {
+    //   if (this->p_settings->data == nullptr)
+    //     return;
+    //   
+    //   SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+    //   s_data.frost_protection_temperature = value;
+    //   
+    //   this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+    //   this->connect();
+    // }
 
-    void Device::write_vacation_temperature(float value)
-    {
-      if (this->p_settings->data == nullptr)
-        return;
-      
-      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-      s_data.vacation_temperature = value;
-      
-      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-      this->connect();
-    }
+    // void Device::write_vacation_temperature(float value)
+    // {
+    //   if (this->p_settings->data == nullptr)
+    //     return;
+    //   
+    //   SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+    //   s_data.vacation_temperature = value;
+    //   
+    //   this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+    //   this->connect();
+    // }
 
-    void Device::write_child_safety(bool state)
-    {
-      if (this->p_settings->data == nullptr)
-        return;
-      
-      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-      s_data.set_lock_control(state);
-      
-      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-      this->connect();
-    }
+    // void Device::write_child_safety(bool state)
+    // {
+    //   if (this->p_settings->data == nullptr)
+    //     return;
+    //   
+    //   SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+    //   s_data.set_lock_control(state);
+    //   
+    //   this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+    //   this->connect();
+    // }
 
-    void Device::write_adaptive_learning(bool state)
-    {
-      if (this->p_settings->data == nullptr)
-        return;
-      
-      SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-      s_data.set_adaptable_regulation(state);
-      
-      this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-      this->connect();
-    }
+    // void Device::write_adaptive_learning(bool state)
+    // {
+    //   if (this->p_settings->data == nullptr)
+    //     return;
+    //   
+    //   SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
+    //   s_data.set_adaptable_regulation(state);
+    //   
+    //   this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
+    //   this->connect();
+    // }
 
     void Device::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)
     {

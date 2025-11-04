@@ -46,12 +46,13 @@ namespace esphome
       void set_secret_key(const string &);
       void set_pin_code(const string &);
       
-      void write_temperature_min(float value);
-      void write_temperature_max(float value);
-      void write_frost_protection_temperature(float value);
-      void write_vacation_temperature(float value);
-      void write_child_safety(bool state);
-      void write_adaptive_learning(bool state);
+      // Temporarily disabled - focus on basic temperature control first
+      // void write_temperature_min(float value);
+      // void write_temperature_max(float value);
+      // void write_frost_protection_temperature(float value);
+      // void write_vacation_temperature(float value);
+      // void write_child_safety(bool state);
+      // void write_adaptive_learning(bool state);
 
     protected:
       void control(const ClimateCall &call) override;
