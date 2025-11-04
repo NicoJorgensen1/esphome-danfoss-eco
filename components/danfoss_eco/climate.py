@@ -147,32 +147,38 @@ async def to_code(config):
     if CONF_TEMPERATURE_MIN in config:
         num = await number.new_number(config[CONF_TEMPERATURE_MIN], min_value=5.0, max_value=30.0, step=0.5)
         cg.add(var.set_temperature_min(num))
-        cg.add(num.add_on_state_callback(lambda value: var.write_temperature_min(value)))
+        templ = cg.Lambda("[{}](float value) {{ {}->write_temperature_min(value); }}".format(var, var))
+        cg.add(num.add_on_state_callback(templ))
     
     if CONF_TEMPERATURE_MAX in config:
         num = await number.new_number(config[CONF_TEMPERATURE_MAX], min_value=5.0, max_value=30.0, step=0.5)
         cg.add(var.set_temperature_max(num))
-        cg.add(num.add_on_state_callback(lambda value: var.write_temperature_max(value)))
+        templ = cg.Lambda("[{}](float value) {{ {}->write_temperature_max(value); }}".format(var, var))
+        cg.add(num.add_on_state_callback(templ))
     
     if CONF_FROST_PROTECTION_TEMPERATURE in config:
         num = await number.new_number(config[CONF_FROST_PROTECTION_TEMPERATURE], min_value=5.0, max_value=10.0, step=0.5)
         cg.add(var.set_frost_protection_temperature(num))
-        cg.add(num.add_on_state_callback(lambda value: var.write_frost_protection_temperature(value)))
+        templ = cg.Lambda("[{}](float value) {{ {}->write_frost_protection_temperature(value); }}".format(var, var))
+        cg.add(num.add_on_state_callback(templ))
     
     if CONF_VACATION_TEMPERATURE in config:
         num = await number.new_number(config[CONF_VACATION_TEMPERATURE], min_value=5.0, max_value=20.0, step=0.5)
         cg.add(var.set_vacation_temperature(num))
-        cg.add(num.add_on_state_callback(lambda value: var.write_vacation_temperature(value)))
+        templ = cg.Lambda("[{}](float value) {{ {}->write_vacation_temperature(value); }}".format(var, var))
+        cg.add(num.add_on_state_callback(templ))
     
     if CONF_CHILD_SAFETY in config:
         sw = await switch.new_switch(config[CONF_CHILD_SAFETY])
         cg.add(var.set_child_safety(sw))
-        cg.add(sw.add_on_state_callback(lambda value: var.write_child_safety(value)))
+        templ = cg.Lambda("[{}](bool value) {{ {}->write_child_safety(value); }}".format(var, var))
+        cg.add(sw.add_on_state_callback(templ))
     
     if CONF_ADAPTIVE_LEARNING in config:
         sw = await switch.new_switch(config[CONF_ADAPTIVE_LEARNING])
         cg.add(var.set_adaptive_learning(sw))
-        cg.add(sw.add_on_state_callback(lambda value: var.write_adaptive_learning(value)))
+        templ = cg.Lambda("[{}](bool value) {{ {}->write_adaptive_learning(value); }}".format(var, var))
+        cg.add(sw.add_on_state_callback(templ))
     
     if CONF_MAC_ADDRESS in config:
         sens = await sensor.new_sensor(config[CONF_MAC_ADDRESS])
