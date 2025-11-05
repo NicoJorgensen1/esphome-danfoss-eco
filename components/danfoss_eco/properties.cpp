@@ -126,17 +126,28 @@ namespace esphome
             // apply read configuration to the component
             this->component_->mode = s_data->device_mode;
             
-            // Update preset based on device mode
-            if (s_data->raw_device_mode == SettingsData::DeviceMode::VACATION)
+            // Only update preset if current preset is invalid or this is initial setup
+            // Don't overwrite user-selected presets since device doesn't store them
+            bool preset_is_uninitialized = (this->component_->preset.value_or(ClimatePreset::CLIMATE_PRESET_NONE) == ClimatePreset::CLIMATE_PRESET_NONE);
+            
+            if (s_data->raw_device_mode == SettingsData::DeviceMode::VACATION && 
+                (preset_is_uninitialized || this->component_->preset != ClimatePreset::CLIMATE_PRESET_AWAY))
             {
-                // Use AWAY preset to represent vacation mode
+                // Device is actually in vacation mode, update preset to match
                 this->component_->preset = ClimatePreset::CLIMATE_PRESET_AWAY;
             }
-            else if (s_data->raw_device_mode == SettingsData::DeviceMode::SCHEDULED)
+            else if (s_data->raw_device_mode != SettingsData::DeviceMode::VACATION && 
+                     this->component_->preset == ClimatePreset::CLIMATE_PRESET_AWAY)
             {
-                // Default to HOME preset for scheduled mode
+                // Device left vacation mode but preset still shows AWAY, reset to HOME
                 this->component_->preset = ClimatePreset::CLIMATE_PRESET_HOME;
             }
+            else if (preset_is_uninitialized)
+            {
+                // Initial setup - set default preset based on device mode
+                this->component_->preset = ClimatePreset::CLIMATE_PRESET_HOME;
+            }
+            // For SCHEDULED/MANUAL modes: preserve whatever preset user selected (HOME, SLEEP, etc.)
             
             this->component_->set_visual_min_temperature_override(s_data->temperature_min);
             this->component_->set_visual_max_temperature_override(s_data->temperature_max);
