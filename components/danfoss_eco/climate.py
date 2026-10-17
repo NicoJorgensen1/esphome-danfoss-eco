@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import climate, ble_client, sensor, binary_sensor
+from esphome.components import climate, ble_client, sensor, binary_sensor, text_sensor
 from esphome.const import (
     CONF_ID,
     CONF_NAME,
@@ -24,11 +24,19 @@ from esphome.const import (
 CODEOWNERS = ["@dmitry-cherkas"]
 DEPENDENCIES = ["ble_client"]
 # load zero-configuration dependencies automatically
-AUTO_LOAD = ["sensor", "binary_sensor", "esp32_ble_tracker"]
+AUTO_LOAD = ["sensor", "binary_sensor", "text_sensor", "esp32_ble_tracker"]
 
 CONF_PIN_CODE = 'pin_code'
 CONF_SECRET_KEY = 'secret_key'
 CONF_PROBLEMS = 'problems'
+CONF_COMMAND_TIMEOUT = 'command_timeout'
+CONF_COMMAND_STATUS = 'command_status'
+
+def validate_command_timeout(value):
+    value = cv.positive_time_period_milliseconds(value)
+    if not 1 <= value.total_milliseconds <= 86400000:
+        raise cv.Invalid("command_timeout must be between 1ms and 24h")
+    return value
 
 eco_ns = cg.esphome_ns.namespace("danfoss_eco")
 DanfossEco = eco_ns.class_(
@@ -55,6 +63,11 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(DanfossEco),
             cv.Optional(CONF_SECRET_KEY): validate_secret,
             cv.Optional(CONF_PIN_CODE): validate_pin,
+            cv.Optional(CONF_COMMAND_TIMEOUT, default="15min"): validate_command_timeout,
+            cv.Optional(CONF_COMMAND_STATUS): text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:message-check-outline",
+            ),
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement=UNIT_PERCENT,
                 accuracy_decimals=0,
@@ -89,6 +102,10 @@ async def to_code(config):
     
     cg.add(var.set_secret_key(config.get(CONF_SECRET_KEY, "")))
     cg.add(var.set_pin_code(config.get(CONF_PIN_CODE, "")))
+    cg.add(var.set_command_timeout(config[CONF_COMMAND_TIMEOUT]))
+    if CONF_COMMAND_STATUS in config:
+        status = await text_sensor.new_text_sensor(config[CONF_COMMAND_STATUS])
+        cg.add(var.set_command_status(status))
     
     if CONF_BATTERY_LEVEL in config:
         sens = await sensor.new_sensor(config[CONF_BATTERY_LEVEL])

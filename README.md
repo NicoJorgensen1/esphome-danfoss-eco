@@ -52,10 +52,35 @@ optimistic acknowledgments. `auto` verification requires scheduled mode, not vac
 Repeated polls coalesce; the latest pending request for each setting wins. Controls
 run before routine polls, after any pairing prerequisite. A failed diagnostic read
 is skipped so it cannot discard an unrelated control. Connection, discovery, PIN,
-and request deadlines recover stalled sessions. Failed sessions get four retries
-with 2/4/8/16-second backoff, then discard pending work with a warning. Polls do not
-reset an active retry budget. A future poll or command starts a new batch.
-This is bounded retry, not a guarantee of delivery: check readback and warnings.
+and request deadlines recover stalled sessions. Pending controls retry until their
+configurable deadline, with 2/4/8/16/32/60-second backoff capped at 60 seconds.
+Routine polling alone still stops after five failed attempts. Polls do not extend
+a control deadline. A newer request for the same setting replaces the older one
+and starts its own deadline; temperature and mode have independent deadlines.
+
+Set the timeout separately for each thermostat in its `climate` configuration:
+
+```yaml
+    command_timeout: 15min
+    command_status:
+      name: "My Room eTRV Command Delivery"
+```
+
+`command_timeout` defaults to `15min`, accepts ESPHome durations from `1ms` to
+`24h`, and requires rebuilding/uploading firmware when edited. The optional
+diagnostic text sensor reports `unknown` after boot, `pending` while any current
+request awaits readback, `confirmed` after all current requests are verified,
+or `failed` when a request expires or is rejected. A failure remains visible
+after routine successful polls; a new valid request starts a new status cycle.
+If one setting expires while another is pending, status stays `pending`, then
+becomes `failed` when the remaining setting finishes. This sensor describes
+command delivery, not continuous connectivity or the thermostat's Problems flag.
+
+An expired command is removed and cannot start further writes. A write already
+sent cannot be retracted: `failed` means **not confirmed before the deadline**, not
+proof that the thermostat did nothing. Pending commands are held in RAM and are
+lost on ESP32 restart; `unknown` avoids claiming interrupted commands succeeded.
+There is no guarantee of delivery while the thermostat remains unreachable.
 
 Malformed packet lengths are rejected before parsing. A thermostat may return
 inconsistent temperature limits (observed raw minimum/maximum 100/68). These do

@@ -1,5 +1,6 @@
 #include "device.h"
 #include <cmath>
+#include "esphome/core/hal.h"
 
 #ifdef USE_ESP32
 
@@ -22,12 +23,16 @@ namespace esphome
       // pretend, we have already discovered the device
       copy_address(this->parent()->get_address(), this->parent()->get_remote_bda());
       this->parent()->set_state(ClientState::INIT);
+      this->publish_command_status();
     }
 
     void Device::loop()
     {
+      this->expire_controls();
       if (this->node_state != ClientState::ESTABLISHED || this->request_pending_ || this->recovering_)
         return;
+      if (this->in_flight_ && !this->current_control(*this->in_flight_))
+        this->in_flight_.reset();
       if (!this->in_flight_)
         this->in_flight_ = this->commands_.pop();
       if (!this->in_flight_)
@@ -73,6 +78,7 @@ namespace esphome
 
     void Device::control(const ClimateCall &call)
     {
+      // Validate the entire call before queuing either setting.
       if (call.get_target_temperature().has_value())
       {
         const float target = *call.get_target_temperature();
@@ -80,9 +86,10 @@ namespace esphome
         {
           ESP_LOGW(TAG, "[%s] invalid target temperature", this->get_name().c_str());
           this->status_set_warning();
+          this->delivery_seen_ = this->delivery_failed_ = true;
+          this->publish_command_status();
           return;
         }
-        this->commands_.push(new Command(this->p_temperature, target));
       }
       if (call.get_mode().has_value())
       {
@@ -90,12 +97,94 @@ namespace esphome
         if (mode != CLIMATE_MODE_AUTO && mode != CLIMATE_MODE_HEAT)
         {
           this->status_set_warning();
+          this->delivery_seen_ = this->delivery_failed_ = true;
+          this->publish_command_status();
           return;
         }
-        this->commands_.push(new Command(this->p_settings, mode));
       }
+      if (!call.get_target_temperature().has_value() && !call.get_mode().has_value())
+        return;
+      // Publish only after this request is accepted: a synchronous status
+      // callback may submit a newer request which must win over this one.
+      this->expire_controls(false);
+      this->delivery_seen_ = true;
+      this->delivery_failed_ = false;
+      if (call.get_target_temperature().has_value())
+        this->accept_control(std::make_unique<Command>(this->p_temperature, *call.get_target_temperature()));
+      if (call.get_mode().has_value())
+        this->accept_control(std::make_unique<Command>(this->p_settings, *call.get_mode()));
+      this->publish_command_status();
       // HA reports the last observed state until the thermostat readback arrives.
       this->start_work();
+    }
+
+    void Device::accept_control(std::unique_ptr<Command> command)
+    {
+      command->delivery_id = ++this->next_delivery_id_;
+      this->pending_controls_[command->property.get()] = {command->delivery_id, millis()};
+      this->commands_.push(std::move(command));
+    }
+
+    bool Device::current_control(const Command &command) const
+    {
+      if (command.type == CommandType::READ)
+        return true;
+      const auto it = this->pending_controls_.find(command.property.get());
+      return it != this->pending_controls_.end() && it->second.id == command.delivery_id;
+    }
+
+    void Device::publish_command_status()
+    {
+      const char *state = !this->pending_controls_.empty() ? "pending" :
+                          this->delivery_failed_ ? "failed" : this->delivery_seen_ ? "confirmed" : "unknown";
+      if (this->last_command_status_ == nullptr || strcmp(state, this->last_command_status_) != 0)
+      {
+        this->last_command_status_ = state;
+        if (this->command_status_ != nullptr)
+          this->command_status_->publish_state(state);
+      }
+    }
+
+    bool Device::expire_controls(bool publish)
+    {
+      bool expired = false;
+      const uint32_t now = millis();
+      for (auto it = this->pending_controls_.begin(); it != this->pending_controls_.end();)
+      {
+        if (uint32_t(now - it->second.started) < this->command_timeout_)
+        {
+          ++it;
+          continue;
+        }
+        this->commands_.remove_write(it->first);
+        it = this->pending_controls_.erase(it);
+        expired = true;
+      }
+      if (!expired)
+        return false;
+      ESP_LOGW(TAG, "[%s] command delivery deadline expired without confirmation", this->get_name().c_str());
+      this->delivery_failed_ = true;
+      this->status_set_warning();
+      // Drain the old connection before sending anything else. Late replies
+      // cannot revive expired intent or be mistaken for a new transaction.
+      this->cancel_timeout("request");
+      this->cancel_timeout("pin");
+      this->cancel_timeout("session");
+      this->cancel_timeout("retry");
+      this->cancel_timeout("reconnect");
+      this->request_pending_ = this->pin_pending_ = this->recovering_ = false;
+      if (this->in_flight_ && this->current_control(*this->in_flight_))
+        this->commands_.retry(std::move(this->in_flight_));
+      this->in_flight_.reset();
+      this->batch_active_ = false;
+      this->disconnect();
+      // control() will restart after accepting its replacement. Do not enter
+      // connect() (which can expire another setting) in the middle of that call.
+      if (publish && !this->commands_.is_empty())
+        this->start_work();
+      if (publish)
+        this->publish_command_status();
+      return true;
     }
 
     bool Device::response_matches(bool write, uint16_t handle) const
@@ -106,6 +195,8 @@ namespace esphome
 
     void Device::fail_session(const char *reason)
     {
+      if (this->expire_controls())
+        return;
       if (this->recovering_)
         return;
       ESP_LOGW(TAG, "[%s] %s", this->get_name().c_str(), reason);
@@ -116,11 +207,14 @@ namespace esphome
       this->pin_pending_ = false;
       this->cancel_timeout("reconnect");
       this->request_pending_ = false;
-      if (this->in_flight_)
+      if (this->in_flight_ && this->current_control(*this->in_flight_))
         this->commands_.retry(std::move(this->in_flight_));
+      this->in_flight_.reset();
       this->recovering_ = true;
       this->disconnect();
-      if (++this->retries_ > 4)
+      if (this->retries_ < 6)
+        ++this->retries_;
+      if (this->retries_ > 4 && this->pending_controls_.empty())
       {
         ESP_LOGW(TAG, "[%s] retry limit reached; pending work discarded", this->get_name().c_str());
         this->commands_.clear();
@@ -128,8 +222,10 @@ namespace esphome
         this->recovering_ = false;
         return;
       }
-      const uint32_t delay = 2000u << (this->retries_ - 1);
+      const uint32_t delay = std::min(60000u, 2000u << (this->retries_ - 1));
       this->set_timeout("retry", delay, [this]() {
+        if (this->expire_controls())
+          return;
         this->recovering_ = false;
         this->set_timeout("session", 60000, [this]() { this->fail_session("connection setup timed out"); });
         this->connect();
@@ -224,11 +320,30 @@ namespace esphome
 
     void Device::on_read(esp_ble_gattc_cb_param_t::gattc_read_char_evt_param param)
     {
+      if (this->expire_controls())
+        return;
       if (!this->response_matches(false, param.handle))
         return;
       this->cancel_timeout("request");
       this->request_pending_ = false;
-      if (param.status != ESP_GATT_OK || !this->in_flight_->property->update_state(param.value, param.value_len))
+      if (!this->current_control(*this->in_flight_))
+      {
+        this->in_flight_.reset();
+        return;
+      }
+      const Command *responding = this->in_flight_.get();
+      const bool valid = param.status == ESP_GATT_OK &&
+                         responding->property->update_state(param.value, param.value_len);
+      // State publication invokes ESPHome automations synchronously. Those
+      // callbacks can replace intent or expire/reset this very transaction.
+      if (this->in_flight_.get() != responding || this->expire_controls())
+        return;
+      if (!this->current_control(*this->in_flight_))
+      {
+        this->in_flight_.reset();
+        return;
+      }
+      if (!valid)
       {
         if (this->in_flight_->type == CommandType::READ && this->in_flight_->property != this->p_secret_key)
         {
@@ -255,16 +370,21 @@ namespace esphome
       else
       {
         ESP_LOGI(TAG, "[%s] command confirmed by thermostat readback", this->get_name().c_str());
+        this->pending_controls_.erase(this->in_flight_->property.get());
         this->in_flight_.reset();
-        this->status_clear_warning();
+        if (!this->delivery_failed_)
+          this->status_clear_warning();
         // Mode changes can change the scheduled setpoint too.
         this->commands_.push(new Command(CommandType::READ, this->p_temperature));
         this->commands_.push(new Command(CommandType::READ, this->p_settings));
+        this->publish_command_status();
       }
     }
 
     void Device::on_write(esp_ble_gattc_cb_param_t::gattc_write_evt_param param)
     {
+      if (this->expire_controls())
+        return;
       if (!this->response_matches(true, param.handle))
         return;
       this->cancel_timeout("request");
@@ -277,6 +397,8 @@ namespace esphome
 
     void Device::on_write_pin(esp_ble_gattc_cb_param_t::gattc_write_evt_param param)
     {
+      if (this->expire_controls())
+        return;
       if (!this->pin_pending_ || this->recovering_ || this->closing_ ||
           this->parent()->state() == ClientState::DISCONNECTING)
         return;
@@ -302,6 +424,8 @@ namespace esphome
 
     void Device::connect()
     {
+      if (this->expire_controls())
+        return;
       // A command can arrive before the preceding connection finishes closing.
       // Keep it queued and reconnect once the controller has released the link.
       if (this->parent()->state() == ClientState::DISCONNECTING)

@@ -51,7 +51,8 @@ class TestDevice:public Device {
 int main(int argc,char **argv){
  assert(argc==2);std::string test=argv[1];
  // ESPHome components live for the process lifetime.
- auto *d=new TestDevice;ble_client::BLEClient c;d->initialize(c);d->seed();fake::requests.clear();
+ text_sensor::TextSensor delivery;
+ auto *d=new TestDevice;d->set_command_status(&delivery);ble_client::BLEClient c;d->initialize(c);d->seed();fake::requests.clear();
  if(test=="confirmed-mode"){
   d->control({{},CLIMATE_MODE_HEAT});
   assert(d->mode==CLIMATE_MODE_AUTO);
@@ -104,7 +105,7 @@ int main(int argc,char **argv){
   d->ordinary_read(d->temperature_handle());d->loop();
   assert(d->plaintext(fake::requests.back())[0]==44);
  }else if(test=="bounded-retries"){
-  d->control({21.0f,{}});
+  d->update();
   int tries=0;
   do {fake::reject_next=true;d->loop();++tries;if(!d->timers.count("retry"))break;d->recover();}while(tries<20);
   assert(tries>1 && tries<20);assert(d->warning);assert(!c.enabled);assert(!d->failed);
@@ -124,7 +125,7 @@ int main(int argc,char **argv){
   d->packet(d->settings_handle(),{0x44,20,60,10,3,16,0,0,0,0,0,0,0,0,0,0});
   assert(d->warning);assert(d->timers.count("retry"));
  }else if(test=="poll-does-not-reset-retries"){
-  d->control({21.0f,{}});int tries=0;
+  d->update();int tries=0;
   do{d->update();fake::reject_next=true;d->loop();++tries;if(!d->timers.count("retry"))break;d->recover();}while(tries<20);
   assert(tries==5);assert(d->warning);
  }else if(test=="discovery-deadline"){
@@ -171,6 +172,127 @@ int main(int argc,char **argv){
   d->control({{},CLIMATE_MODE_HEAT});d->loop();d->packet(d->settings_handle(),observed);d->loop();
   auto expected=observed;expected[4]=0;
   assert(d->plaintext(fake::requests.back())==expected);
+ }else if(test=="control-survives-five-failures"){
+  d->control({21.0f,{}});
+  for(int i=0;i<6;++i){
+   fake::reject_next=true;d->loop();
+   assert(d->timers.count("retry"));d->recover();
+  }
+  d->loop();d->ordinary_read(d->temperature_handle());d->loop();
+  assert(fake::requests.back().write);
+  assert(d->plaintext(fake::requests.back())[0]==42);
+ }else if(test=="expired-control-never-writes"){
+  d->control({21.0f,{}});fake::now=900000;d->loop();
+  assert(d->warning);assert(fake::requests.empty());
+  d->establish();d->loop();assert(fake::requests.empty());
+ }else if(test=="poll-cannot-extend-control-deadline"){
+  d->control({21.0f,{}});d->loop();
+  fake::now=899000;d->update();fake::now=900000;d->loop();
+  d->ordinary_read(d->temperature_handle());d->loop();
+  for(const auto &r:fake::requests)assert(!r.write);
+  assert(d->warning);
+ }else if(test=="delivery-status-readback"){
+  assert(delivery.state=="unknown");
+  d->control({21.0f,{}});assert(delivery.state=="pending");
+  d->loop();d->ordinary_read(d->temperature_handle());d->loop();
+  d->ack(d->temperature_handle());assert(delivery.state=="pending");d->loop();
+  d->packet(d->temperature_handle(),{42,38,0,0,0,0,0,0});
+  assert(delivery.state=="confirmed");assert(d->target_temperature==21);
+ }else if(test=="custom-timeout-sticky-failure"){
+  d->set_command_timeout(120000);d->control({21.0f,{}});
+  fake::now=119999;d->loop();assert(delivery.state=="pending");
+  fake::now=120000;d->loop();assert(delivery.state=="failed");
+  c.set_state(ClientState::IDLE);d->update();d->establish();
+  for(int i=0;i<4;++i){d->loop();d->ordinary_read(fake::requests.back().handle);}
+  assert(delivery.state=="failed");
+  d->control({22.0f,{}});assert(delivery.state=="pending");
+ }else if(test=="expiry-prepare" || test=="expiry-write" || test=="expiry-verify" || test=="expiry-backoff" || test=="expiry-connecting"){
+  d->set_command_timeout(60000);
+  if(test=="expiry-connecting")c.set_state(ClientState::IDLE);
+  d->control({21.0f,{}});
+  if(test!="expiry-connecting")d->loop();
+  if(test=="expiry-write" || test=="expiry-verify"){
+   d->ordinary_read(d->temperature_handle());d->loop();
+   if(test=="expiry-verify"){d->ack(d->temperature_handle());d->loop();}
+  }
+  if(test=="expiry-backoff")d->fire("request");
+  auto count=fake::requests.size();fake::now=60000;
+  // A late reply must check the deadline even before the next main loop.
+  if(test=="expiry-write")d->ack(d->temperature_handle());
+  else if(test=="expiry-prepare" || test=="expiry-verify")d->packet(d->temperature_handle(),{42,38,0,0,0,0,0,0});
+  else d->loop();
+  assert(delivery.state=="failed");
+  d->ordinary_read(d->temperature_handle());d->ack(d->temperature_handle());
+  d->establish();d->loop();assert(fake::requests.size()==count);
+  assert(!d->timers.count("request") && !d->timers.count("retry"));
+ }else if(test=="newer-request-has-own-deadline"){
+  d->set_command_timeout(60000);d->control({21.0f,{}});d->loop();
+  fake::now=59000;d->control({22.0f,{}});
+  d->ordinary_read(d->temperature_handle());d->loop();
+  assert(!fake::requests.back().write); // old PREPARE must not proceed to WRITE
+  fake::now=60000;d->ordinary_read(d->temperature_handle());d->loop();
+  assert(d->plaintext(fake::requests.back())[0]==44);assert(delivery.state=="pending");
+  d->ack(d->temperature_handle());d->loop();d->packet(d->temperature_handle(),{44,38,0,0,0,0,0,0});
+  assert(delivery.state=="confirmed");
+ }else if(test=="superseded-readback-cannot-confirm"){
+  d->control({21.0f,{}});d->loop();d->ordinary_read(d->temperature_handle());d->loop();
+  d->ack(d->temperature_handle());d->loop();d->control({22.0f,{}});
+  d->packet(d->temperature_handle(),{42,38,0,0,0,0,0,0});assert(delivery.state=="pending");
+  d->loop();d->ordinary_read(d->temperature_handle());d->loop();
+  assert(d->plaintext(fake::requests.back())[0]==44);
+ }else if(test=="independent-setting-deadlines"){
+  d->set_command_timeout(60000);d->control({21.0f,{}});d->loop();
+  fake::now=59000;d->control({{},CLIMATE_MODE_HEAT});
+  fake::now=60000;d->loop();assert(delivery.state=="pending");
+  c.set_state(ClientState::IDLE);d->fire("reconnect");d->establish();d->loop();
+  assert(fake::requests.back().handle==d->settings_handle());
+  d->ordinary_read(d->settings_handle());d->loop();d->ack(d->settings_handle());d->loop();
+  d->packet(d->settings_handle(),{0x44,20,60,10,0,16,0,0,0,0,0,0,0,0,0,0});
+  assert(delivery.state=="failed"); // mode confirmed, earlier target expired
+ }else if(test=="millis-wraparound"){
+  fake::now=UINT32_MAX-30000;d->set_command_timeout(60000);d->control({21.0f,{}});
+  fake::now=29998;d->loop();assert(delivery.state=="pending");
+  fake::now=29999;d->loop();assert(delivery.state=="failed");
+ }else if(test=="capped-control-backoff"){
+  d->control({21.0f,{}});
+  for(int i=0;i<260;++i){
+   fake::reject_next=true;d->loop();assert(d->timers.count("retry"));
+   assert(d->delays.at("retry")==uint32_t(i<5 ? 2000u<<i : 60000u));d->recover();
+  }
+ }else if(test=="invalid-call-is-atomic"){
+  d->control({21.0f,CLIMATE_MODE_OFF});d->loop();
+  assert(delivery.state=="failed");assert(fake::requests.empty());
+ }else if(test=="thermostats-have-independent-deadlines"){
+  text_sensor::TextSensor other_status;auto *other=new TestDevice;ble_client::BLEClient other_client;
+  other->set_command_status(&other_status);other->initialize(other_client);other->seed();
+  d->set_command_timeout(60000);other->set_command_timeout(120000);
+  d->control({21.0f,{}});other->control({22.0f,{}});fake::now=60000;
+  d->loop();other->loop();assert(delivery.state=="failed" && other_status.state=="pending");
+  other->ordinary_read(other->temperature_handle());other->loop();
+  assert(other->plaintext(fake::requests.back())[0]==44);
+ }else if(test=="callback-replaces-verifying-command"){
+  d->control({21.0f,{}});d->loop();d->ordinary_read(d->temperature_handle());d->loop();
+  d->ack(d->temperature_handle());d->loop();
+  d->on_state=[&](){d->control({22.0f,{}});};
+  d->packet(d->temperature_handle(),{42,38,0,0,0,0,0,0});d->on_state=nullptr;
+  assert(delivery.state=="pending");
+  d->loop();d->ordinary_read(d->temperature_handle());d->loop();
+  assert(fake::requests.back().write && d->plaintext(fake::requests.back())[0]==44);
+  d->ack(d->temperature_handle());d->loop();d->packet(d->temperature_handle(),{44,38,0,0,0,0,0,0});
+  assert(delivery.state=="confirmed");
+ }else if(test=="callback-expires-verifying-command"){
+  d->set_command_timeout(60000);d->control({21.0f,{}});
+  d->loop();d->ordinary_read(d->temperature_handle());d->loop();d->ack(d->temperature_handle());d->loop();
+  d->on_state=[&](){fake::now=60000;d->control({22.0f,{}});};
+  d->packet(d->temperature_handle(),{42,38,0,0,0,0,0,0});d->on_state=nullptr;
+  assert(delivery.state=="pending");c.set_state(ClientState::IDLE);d->fire("reconnect");d->establish();d->loop();
+  d->ordinary_read(d->temperature_handle());d->loop();
+  assert(fake::requests.back().write && d->plaintext(fake::requests.back())[0]==44);
+ }else if(test=="new-request-publishes-after-acceptance"){
+  d->set_command_timeout(60000);d->control({21.0f,{}});fake::now=60000;
+  bool transient_failure=false;delivery.on_state=[&](){if(delivery.state=="failed")transient_failure=true;};
+  d->control({22.0f,{}});
+  assert(!transient_failure && delivery.state=="pending");
  }else return 2;
  std::cout<<test<<": passed\n";
 }

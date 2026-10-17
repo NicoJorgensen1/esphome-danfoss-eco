@@ -22,6 +22,7 @@ namespace esphome::danfoss_eco
         std::optional<climate::ClimateMode> mode;
         CommandPhase phase{CommandPhase::PREPARE};
         bool prerequisite{false};
+        uint64_t delivery_id{0};
 
         bool is_write_step() const { return type == CommandType::WRITE && phase == CommandPhase::WRITE; }
         bool same_intent(const Command &other) const { return type == other.type && property == other.property; }
@@ -106,6 +107,14 @@ namespace esphome::danfoss_eco
             auto command = std::move(q_.front()); q_.pop_front(); return command;
         }
         bool is_empty() const { return q_.empty(); }
+        void remove_write(const DeviceProperty *property)
+        {
+            for (auto it = q_.begin(); it != q_.end();)
+                if ((*it)->type == CommandType::WRITE && (*it)->property.get() == property)
+                    it = q_.erase(it);
+                else
+                    ++it;
+        }
         void clear() { q_.clear(); }
     private:
         std::deque<std::unique_ptr<Command>> q_;

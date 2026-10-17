@@ -1,11 +1,13 @@
 #pragma once
 
 #include <set>
+#include <map>
 
 #include "esphome/components/ble_client/ble_client.h"
 #include "esphome/components/climate/climate.h"
 
 #include "esphome/core/preferences.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 
 #include "helpers.h"
 #include "command.h"
@@ -47,6 +49,8 @@ namespace esphome
 
       void set_secret_key(const string &);
       void set_pin_code(const string &);
+      void set_command_timeout(uint32_t timeout) { command_timeout_ = timeout; }
+      void set_command_status(text_sensor::TextSensor *sensor) { command_status_ = sensor; }
 
     protected:
       void control(const ClimateCall &call) override;
@@ -77,6 +81,18 @@ namespace esphome
 
       void fail_session(const char *reason);
       void start_work();
+      void accept_control(std::unique_ptr<Command> command);
+      bool current_control(const Command &command) const;
+      bool expire_controls(bool publish = true);
+      void publish_command_status();
+      struct PendingControl { uint64_t id; uint32_t started; };
+      std::map<const DeviceProperty *, PendingControl> pending_controls_;
+      uint64_t next_delivery_id_{0};
+      uint32_t command_timeout_{900000};
+      text_sensor::TextSensor *command_status_{nullptr};
+      const char *last_command_status_{nullptr};
+      bool delivery_seen_{false};
+      bool delivery_failed_{false};
       bool response_matches(bool write, uint16_t handle) const;
       std::unique_ptr<Command> in_flight_;
       bool request_pending_{false};

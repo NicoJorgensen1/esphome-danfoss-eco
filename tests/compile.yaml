@@ -37,6 +37,9 @@ climate:
     ble_client_id: thermostat_one
     secret_key: '00000000000000000000000000000000'
     update_interval: 15min
+    command_timeout: 10min
+    command_status:
+      name: Test Command Delivery One
     temperature:
       name: Test Temperature One
     battery_level:
@@ -48,6 +51,8 @@ climate:
     ble_client_id: thermostat_two
     secret_key: '00000000000000000000000000000000'
     update_interval: 16min
+    command_status:
+      name: Test Command Delivery Two
     temperature:
       name: Test Temperature Two
     battery_level:

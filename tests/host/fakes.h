@@ -26,6 +26,7 @@ namespace fake {
 struct Request {bool write; uint16_t handle; std::vector<uint8_t> bytes;};
 inline std::vector<Request> requests;
 inline bool reject_next=false;
+inline uint32_t now=0;
 inline int record(bool write,uint16_t handle,const uint8_t *data=nullptr,size_t size=0) {
  if(reject_next){reject_next=false;return 1;}
  requests.push_back({write,handle,{}});
@@ -37,6 +38,7 @@ inline int esp_ble_gattc_read_char(int,int,uint16_t h,int){return fake::record(f
 inline int esp_ble_gattc_write_char(int,int,uint16_t h,uint16_t n,uint8_t *p,int,int){return fake::record(true,h,p,n);}
 inline int esp_ble_gap_stop_scanning(){return 0;}
 namespace esphome {
+inline uint32_t millis(){return fake::now;}
 using std::optional;
 inline uint32_t fnv1_hash(const std::string &){return 1;}
 inline std::string format_hex_pretty(const uint8_t *,size_t){return {};}
@@ -48,13 +50,15 @@ class Component {
  virtual float get_setup_priority() const{return 0;}
  bool error=false,warning=false,failed=false;
  std::map<std::string,std::function<void()>> timers;
- void set_timeout(const char *n,uint32_t,std::function<void()> f){timers[n]=std::move(f);}
+ std::map<std::string,uint32_t> delays;
+ void set_timeout(const char *n,uint32_t ms,std::function<void()> f){timers[n]=std::move(f);delays[n]=ms;}
  bool cancel_timeout(const char *n){return timers.erase(n)>0;}
  void fire(const std::string &n){auto f=timers.at(n);timers.erase(n);f();}
  bool status_has_error()const{return error;} void status_set_error(){error=true;} void status_clear_error(){error=false;}
  void status_set_warning(){warning=true;} void status_clear_warning(){warning=false;} void mark_failed(){failed=true;}
 };
 class PollingComponent:public Component{public:virtual void update(){}};
+namespace text_sensor {struct TextSensor{std::string state;std::function<void()> on_state;void publish_state(const char *v){state=v;if(on_state)on_state();}};}
 namespace sensor {struct Sensor{float state=NAN;void publish_state(float v){state=v;}};}
 namespace binary_sensor {struct BinarySensor{bool state=false;void publish_state(bool v){state=v;}};}
 namespace climate {
@@ -69,9 +73,10 @@ class Climate {
  virtual ~Climate()=default; virtual ClimateTraits traits(){return {};}
  ClimateMode mode=CLIMATE_MODE_AUTO; float target_temperature=NAN,current_temperature=NAN;
  ClimateAction action=ClimateAction::CLIMATE_ACTION_IDLE; int publications=0;
+ std::function<void()> on_state;
  const std::string& get_name()const{static std::string s="Test";return s;}
  float visual_min=10,visual_max=30;
- void publish_state(){++publications;} void set_visual_min_temperature_override(float v){visual_min=v;} void set_visual_max_temperature_override(float v){visual_max=v;}
+ void publish_state(){++publications;if(on_state)on_state();} void set_visual_min_temperature_override(float v){visual_min=v;} void set_visual_max_temperature_override(float v){visual_max=v;}
  protected: virtual void control(const ClimateCall&){}
 };
 }
