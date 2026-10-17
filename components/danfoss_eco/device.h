@@ -32,7 +32,7 @@ namespace esphome
       void dump_config() override
       {
         LOG_CLIMATE("", "Danfoss Eco eTRV", this);
-        ESP_LOGCONFIG(TAG, "  MAC Address: %s", this->parent()->address_str().c_str());
+        ESP_LOGCONFIG(TAG, "  MAC Address: %s", this->parent()->address_str());
         LOG_SENSOR("", "Battery Level", this->battery_level_);
         LOG_SENSOR("", "Room Temperature", this->temperature_);
         LOG_BINARY_SENSOR("", "Problems", this->problems_);
@@ -75,7 +75,16 @@ namespace esphome
       ESPPreferenceObject secret_pref_;
       uint32_t pin_code_ = 0;
 
-      uint8_t request_counter_ = 0;
+      void fail_session(const char *reason);
+      void start_work();
+      bool response_matches(bool write, uint16_t handle) const;
+      std::unique_ptr<Command> in_flight_;
+      bool request_pending_{false};
+      bool recovering_{false};
+      bool batch_active_{false};
+      bool closing_{false};
+      bool pin_pending_{false};
+      uint8_t retries_{0};
       CommandQueue commands_;
     };
 

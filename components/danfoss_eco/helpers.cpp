@@ -89,12 +89,17 @@ namespace esphome
 
         uint8_t *decrypt(shared_ptr<Xxtea> &xxtea, uint8_t *value, uint16_t value_len)
         {
+            if (xxtea->status() != XXTEA_STATUS_SUCCESS || value == nullptr || value_len == 0 || value_len > MAX_XXTEA_DATA8)
+                return nullptr;
             uint8_t buffer[value_len];
             reverse_chunks(value, value_len, buffer);
 
             auto xxtea_status = xxtea->decrypt(buffer, value_len);
             if (xxtea_status != XXTEA_STATUS_SUCCESS)
+            {
                 ESP_LOGW(TAG, "xxtea_decrypt failed, status=%d", xxtea_status);
+                return nullptr;
+            }
             else
                 reverse_chunks(buffer, value_len, value);
             return value;

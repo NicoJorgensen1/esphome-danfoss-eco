@@ -1,4 +1,5 @@
 #include "device.h"
+#include <cmath>
 
 #ifdef USE_ESP32
 
@@ -25,75 +26,114 @@ namespace esphome
 
     void Device::loop()
     {
-      if (this->status_has_error())
-      {
-        this->disconnect();
-        this->status_clear_error();
-      }
-
-      if (this->node_state != ClientState::ESTABLISHED)
+      if (this->node_state != ClientState::ESTABLISHED || this->request_pending_ || this->recovering_)
         return;
-
-      Command *cmd = this->commands_.pop();
-      while (cmd != nullptr)
+      if (!this->in_flight_)
+        this->in_flight_ = this->commands_.pop();
+      if (!this->in_flight_)
       {
-        if (cmd->execute(this->parent()))
-          this->request_counter_++;
-
-        delete cmd;
-        cmd = this->commands_.pop();
-      }
-
-      // once we are done with pending commands - check to see if there are any pending requests
-      // if there are no pending requests - we are done with the device for now and should disconnect
-      if (this->request_counter_ == 0)
+        this->batch_active_ = false;
+        this->cancel_timeout("session");
         this->disconnect();
+        return;
+      }
+      if (!this->in_flight_->execute(this->parent()))
+      {
+        this->fail_session("request rejected by Bluetooth stack");
+        return;
+      }
+      this->request_pending_ = true;
+      this->set_timeout("request", 15000, [this]() { this->fail_session("response timed out"); });
+    }
+
+    void Device::start_work()
+    {
+      if (!this->batch_active_)
+      {
+        this->batch_active_ = true;
+        this->retries_ = 0;
+        if (this->node_state != ClientState::ESTABLISHED)
+          this->set_timeout("session", 60000, [this]() { this->fail_session("connection setup timed out"); });
+      }
+      if (!this->recovering_)
+        this->connect();
     }
 
     void Device::update()
     {
-      this->connect();
-
       if (this->xxtea->status() == XXTEA_STATUS_SUCCESS)
       {
-        ESP_LOGI(TAG, "[%s] requesting device state", this->get_name().c_str());
-
         this->commands_.push(new Command(CommandType::READ, this->p_battery));
         this->commands_.push(new Command(CommandType::READ, this->p_temperature));
         this->commands_.push(new Command(CommandType::READ, this->p_settings));
         this->commands_.push(new Command(CommandType::READ, this->p_errors));
       }
+      this->start_work();
     }
 
     void Device::control(const ClimateCall &call)
     {
-      if (call.get_target_temperature().has_value() && !this->p_temperature->data)
-        ESP_LOGW(TAG, "[%s] ignoring temperature command until the first successful read", this->get_name().c_str());
-      else if (call.get_target_temperature().has_value())
+      if (call.get_target_temperature().has_value())
       {
-        TemperatureData &t_data = (TemperatureData &)(*this->p_temperature->data);
-        t_data.target_temperature = *call.get_target_temperature();
-
-        this->commands_.push(new Command(CommandType::WRITE, this->p_temperature));
-        // initiate connection to the device
-        this->connect();
+        const float target = *call.get_target_temperature();
+        if (!std::isfinite(target) || target < 5.0f || target > 35.0f || target * 2 != std::floor(target * 2))
+        {
+          ESP_LOGW(TAG, "[%s] invalid target temperature", this->get_name().c_str());
+          this->status_set_warning();
+          return;
+        }
+        this->commands_.push(new Command(this->p_temperature, target));
       }
-
-      if (call.get_mode().has_value() && !this->p_settings->data)
-        ESP_LOGW(TAG, "[%s] ignoring mode command until the first successful read", this->get_name().c_str());
-      else if (call.get_mode().has_value())
+      if (call.get_mode().has_value())
       {
-        SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
-        s_data.device_mode = *call.get_mode();
-
-        // update state immediately to avoid delays in HA UI
-        this->mode = s_data.device_mode;
-        this->publish_state();
-
-        this->commands_.push(new Command(CommandType::WRITE, this->p_settings));
-        // initiate connection to the device
-        this->connect();
+        const auto mode = *call.get_mode();
+        if (mode != CLIMATE_MODE_AUTO && mode != CLIMATE_MODE_HEAT)
+        {
+          this->status_set_warning();
+          return;
+        }
+        this->commands_.push(new Command(this->p_settings, mode));
       }
+      // HA reports the last observed state until the thermostat readback arrives.
+      this->start_work();
+    }
+
+    bool Device::response_matches(bool write, uint16_t handle) const
+    {
+      return this->request_pending_ && this->in_flight_ &&
+             this->in_flight_->is_write_step() == write && this->in_flight_->property->handle == handle;
+    }
+
+    void Device::fail_session(const char *reason)
+    {
+      if (this->recovering_)
+        return;
+      ESP_LOGW(TAG, "[%s] %s", this->get_name().c_str(), reason);
+      this->status_set_warning();
+      this->cancel_timeout("request");
+      this->cancel_timeout("pin");
+      this->cancel_timeout("session");
+      this->pin_pending_ = false;
+      this->cancel_timeout("reconnect");
+      this->request_pending_ = false;
+      if (this->in_flight_)
+        this->commands_.retry(std::move(this->in_flight_));
+      this->recovering_ = true;
+      this->disconnect();
+      if (++this->retries_ > 4)
+      {
+        ESP_LOGW(TAG, "[%s] retry limit reached; pending work discarded", this->get_name().c_str());
+        this->commands_.clear();
+        this->batch_active_ = false;
+        this->recovering_ = false;
+        return;
+      }
+      const uint32_t delay = 2000u << (this->retries_ - 1);
+      this->set_timeout("retry", delay, [this]() {
+        this->recovering_ = false;
+        this->set_timeout("session", 60000, [this]() { this->fail_session("connection setup timed out"); });
+        this->connect();
+      });
     }
 
     void Device::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)
@@ -104,6 +144,7 @@ namespace esphome
         if (memcmp(param->connect.remote_bda, this->parent()->get_remote_bda(), 6) != 0)
           return; // event does not belong to this client, exit gattc_event_handler
 
+        this->set_timeout("session", 30000, [this]() { this->fail_session("discovery/authentication timed out"); });
         ESP_LOGD(TAG, "[%s] connect, conn_id=%d", this->get_name().c_str(), param->connect.conn_id);
         break;
 
@@ -111,10 +152,12 @@ namespace esphome
         if (param->open.status == ESP_GATT_OK)
           ESP_LOGV(TAG, "[%s] open, conn_id=%d", this->get_name().c_str(), param->open.conn_id);
         else
-          ESP_LOGW(TAG, "[%s] failed to open, conn_id=%d, status=%#04x", this->get_name().c_str(), param->open.conn_id, param->open.status);
+          this->fail_session("connection failed");
         break;
 
       case ESP_GATTC_CLOSE_EVT:
+        if (!this->closing_ && !this->recovering_ && (this->in_flight_ || !this->commands_.is_empty()))
+          this->fail_session("connection closed before work completed");
         if (param->close.status == ESP_GATT_OK)
           ESP_LOGV(TAG, "[%s] close, conn_id=%d, reason=%d", this->get_name().c_str(), param->close.conn_id, param->close.reason);
         else
@@ -122,13 +165,27 @@ namespace esphome
         break;
 
       case ESP_GATTC_DISCONNECT_EVT:
+        if (!this->closing_ && !this->recovering_ && (this->in_flight_ || !this->commands_.is_empty()))
+          this->fail_session("connection interrupted");
         ESP_LOGD(TAG, "[%s] disconnect, conn_id=%d, reason=%#04x", this->get_name().c_str(), param->disconnect.conn_id, (int)param->disconnect.reason);
         break;
 
       case ESP_GATTC_SEARCH_CMPL_EVT:
+        if (this->recovering_ || this->closing_)
+          return;
+        if (param->search_cmpl.status != ESP_GATT_OK)
+        {
+          this->fail_session("service discovery failed");
+          break;
+        }
         for (auto p : this->properties)
-          p->init_handle(this->parent());
-
+        {
+          if (!p->init_handle(this->parent()) && p != this->p_secret_key)
+          {
+            this->fail_session("required characteristic missing");
+            return;
+          }
+        }
         write_pin();
         break;
 
@@ -157,55 +214,89 @@ namespace esphome
       write_int(pin_bytes, 0, this->pin_code_);
 
       if (!this->p_pin->write_request(this->parent(), pin_bytes, sizeof(pin_bytes)))
-        this->status_set_error();
+        this->fail_session("PIN write rejected");
+      else
+      {
+        this->pin_pending_ = true;
+        this->set_timeout("pin", 15000, [this]() { this->fail_session("PIN response timed out"); });
+      }
     }
 
     void Device::on_read(esp_ble_gattc_cb_param_t::gattc_read_char_evt_param param)
     {
-      this->request_counter_--;
-      if (param.status != ESP_GATT_OK)
+      if (!this->response_matches(false, param.handle))
+        return;
+      this->cancel_timeout("request");
+      this->request_pending_ = false;
+      if (param.status != ESP_GATT_OK || !this->in_flight_->property->update_state(param.value, param.value_len))
       {
-        ESP_LOGW(TAG, "[%s] failed to read characteristic: handle=%#04x, status=%#04x", this->get_name().c_str(), param.handle, param.status);
+        if (this->in_flight_->type == CommandType::READ && this->in_flight_->property != this->p_secret_key)
+        {
+          // An explicit failure of one poll must not discard unrelated controls.
+          ESP_LOGW(TAG, "[%s] skipping failed poll, handle=%#04x", this->get_name().c_str(), param.handle);
+          this->status_set_warning();
+          this->in_flight_.reset();
+          return;
+        }
+        this->fail_session("invalid or failed read response");
         return;
       }
-
-      auto device_property = find_if(properties.begin(), properties.end(),
-                                     [&param](shared_ptr<DeviceProperty> p)
-                                     { return p->handle == param.handle; });
-
-      if (device_property != properties.end())
-        (*device_property)->update_state(param.value, param.value_len);
+      if (this->in_flight_->type == CommandType::READ)
+      {
+        const bool learned_key = this->in_flight_->property == this->p_secret_key;
+        this->in_flight_.reset();
+        if (learned_key)
+          this->update();
+      }
+      else if (this->in_flight_->phase == CommandPhase::PREPARE)
+        this->in_flight_->phase = CommandPhase::WRITE;
+      else if (!this->in_flight_->verified())
+        this->fail_session("thermostat readback did not match command");
       else
-        ESP_LOGW(TAG, "[%s] unknown property with handle=%#04x", this->get_name().c_str(), param.handle);
+      {
+        ESP_LOGI(TAG, "[%s] command confirmed by thermostat readback", this->get_name().c_str());
+        this->in_flight_.reset();
+        this->status_clear_warning();
+        // Mode changes can change the scheduled setpoint too.
+        this->commands_.push(new Command(CommandType::READ, this->p_temperature));
+        this->commands_.push(new Command(CommandType::READ, this->p_settings));
+      }
     }
 
     void Device::on_write(esp_ble_gattc_cb_param_t::gattc_write_evt_param param)
     {
-      this->request_counter_--;
+      if (!this->response_matches(true, param.handle))
+        return;
+      this->cancel_timeout("request");
+      this->request_pending_ = false;
       if (param.status != ESP_GATT_OK)
-        ESP_LOGW(TAG, "[%s] failed to write characteristic: handle=%#04x, status=%#04x", this->get_name().c_str(), param.handle, param.status);
+        this->fail_session("write failed");
       else
-        update();
+        this->in_flight_->phase = CommandPhase::VERIFY;
     }
 
     void Device::on_write_pin(esp_ble_gattc_cb_param_t::gattc_write_evt_param param)
     {
+      if (!this->pin_pending_ || this->recovering_ || this->closing_ ||
+          this->parent()->state() == ClientState::DISCONNECTING)
+        return;
+      this->pin_pending_ = false;
+      this->cancel_timeout("pin");
+      this->cancel_timeout("session");
       if (param.status != ESP_GATT_OK)
       {
-        ESP_LOGE(TAG, "[%s] pin FAILED, status=%#04x", this->get_name().c_str(), param.status);
-        this->disconnect();
-        this->mark_failed();
+        this->fail_session("PIN write failed");
         return;
       }
-
-      ESP_LOGD(TAG, "[%s] pin OK", this->get_name().c_str());
       this->node_state = ClientState::ESTABLISHED;
-
-      // after PIN is written, we might need to read the secret_key from the device
-      if (this->xxtea->status() == XXTEA_STATUS_NOT_INITIALIZED && this->p_secret_key->handle != INVALID_HANDLE)
+      if (this->xxtea->status() == XXTEA_STATUS_NOT_INITIALIZED)
       {
-        ESP_LOGD(TAG, "[%s] attempting to read the device secret_key", this->get_name().c_str());
-        this->commands_.push(new Command(CommandType::READ, this->p_secret_key));
+        if (this->p_secret_key->handle == INVALID_HANDLE)
+        {
+          this->fail_session("thermostat key unavailable; press thermostat button to pair");
+          return;
+        }
+        this->commands_.push_prerequisite(std::make_unique<Command>(CommandType::READ, this->p_secret_key));
       }
     }
 
@@ -223,6 +314,7 @@ namespace esphome
         return;
       }
 
+      this->closing_ = false;
       if (this->xxtea->status() == XXTEA_STATUS_NOT_INITIALIZED)
         ESP_LOGI(TAG, "[%s] Short press Danfoss Eco hardware button NOW in order to allow reading the secret key", this->get_name().c_str());
 
@@ -238,8 +330,8 @@ namespace esphome
 
     void Device::disconnect()
     {
+      this->closing_ = true;
       this->parent()->set_enabled(false);
-      this->node_state = ClientState::IDLE;
     }
 
     void Device::set_pin_code(const string &str)
@@ -247,7 +339,6 @@ namespace esphome
       if (str.length() > 0)
         this->pin_code_ = atoi((const char *)str.c_str());
 
-      ESP_LOGD(TAG, "[%s] PIN: %04d", this->get_name().c_str(), this->pin_code_);
     }
 
     void Device::set_secret_key(const string &str)
@@ -277,7 +368,6 @@ namespace esphome
 
     void Device::set_secret_key(uint8_t *key, bool persist)
     {
-      ESP_LOGD(TAG, "[%s] secret_key bytes: %s", this->get_name().c_str(), format_hex_pretty(key, SECRET_KEY_LENGTH).c_str());
 
       int status = this->xxtea->set_key(key, SECRET_KEY_LENGTH);
       if (status != XXTEA_STATUS_SUCCESS)

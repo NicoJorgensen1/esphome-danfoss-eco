@@ -15,6 +15,7 @@ namespace esphome
         struct DeviceData
         {
             uint16_t length;
+            bool valid{false};
 
             DeviceData(uint16_t l, shared_ptr<Xxtea> &xxtea) : length(l), xxtea_(xxtea) {}
             virtual ~DeviceData()
@@ -38,9 +39,14 @@ namespace esphome
 
             TemperatureData(shared_ptr<Xxtea> &xxtea, uint8_t *raw_data, uint16_t value_len) : WritableData(8, xxtea)
             {
+                if (raw_data == nullptr || value_len != length)
+                    return;
                 uint8_t *temperatures = decrypt(this->xxtea_, raw_data, value_len);
+                if (temperatures == nullptr)
+                    return;
                 this->target_temperature = temperatures[0] / 2.0f;
                 this->room_temperature = temperatures[1] / 2.0f;
+                this->valid = true;
             }
 
             void pack(uint8_t *buff)
@@ -77,6 +83,7 @@ namespace esphome
             void set_lock_control(bool state) { set_bit(this->settings_[0], 7, state); }
 
             ClimateMode device_mode;
+            DeviceMode wire_mode;
 
             float temperature_min;
             float temperature_max;
@@ -88,9 +95,18 @@ namespace esphome
 
             SettingsData(shared_ptr<Xxtea> &xxtea, uint8_t *raw_data, uint16_t value_len) : WritableData(16, xxtea)
             {
+                if (raw_data == nullptr || value_len != length)
+                    return;
                 uint8_t *settings = decrypt(this->xxtea_, raw_data, value_len);
+                if (settings == nullptr)
+                    return;
+                this->wire_mode = (DeviceMode)settings[4];
+                if ((wire_mode != MANUAL && wire_mode != SCHEDULED && wire_mode != VACATION && wire_mode != HOLD) || settings[1] > settings[2])
+                    return;
 
                 this->settings_ = (uint8_t *)malloc(length);
+                if (this->settings_ == nullptr)
+                    return;
                 memcpy(this->settings_, (const char *)settings, length);
 
                 this->temperature_min = settings[1] / 2.0f;
@@ -101,6 +117,7 @@ namespace esphome
 
                 this->vacation_from = parse_int(settings, 6);
                 this->vacation_to = parse_int(settings, 10);
+                this->valid = true;
             }
 
             ~SettingsData() { free(this->settings_); }
@@ -143,7 +160,7 @@ namespace esphome
             }
 
         private:
-            uint8_t *settings_;
+            uint8_t *settings_{nullptr};
         };
 
         struct ErrorsData : public DeviceData
@@ -155,14 +172,20 @@ namespace esphome
 
             ErrorsData(shared_ptr<Xxtea> &xxtea, uint8_t *raw_data, uint16_t value_len) : DeviceData(8, xxtea)
             {
+                if (raw_data == nullptr || value_len != length)
+                    return;
                 // unsigned short error;
                 // unsigned char padding[6];
-                uint16_t errors = parse_short(decrypt(this->xxtea_, raw_data, value_len), 0);
+                auto decoded = decrypt(this->xxtea_, raw_data, value_len);
+                if (decoded == nullptr)
+                    return;
+                uint16_t errors = parse_short(decoded, 0);
 
                 E9_VALVE_DOES_NOT_CLOSE = parse_bit(errors, 8);
                 E10_INVALID_TIME = parse_bit(errors, 9);
                 E14_LOW_BATTERY = parse_bit(errors, 13);
                 E15_VERY_LOW_BATTERY = parse_bit(errors, 14);
+                this->valid = true;
             }
         };
 

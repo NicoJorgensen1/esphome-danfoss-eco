@@ -9,7 +9,8 @@ and runtime temperature limits to ESPHome **2026.9.1**, using the Arduino
 framework on `esp32dev`. It also corrects an out-of-bounds access in the
 encryption helper's output-length argument and preserves the full 16-byte
 settings payload when changing mode. Commands arriving before the first
-successful thermostat read are ignored with a warning.
+successful thermostat read retain their requested value until a fresh read
+allows the component to prepare the write.
 Connection requests go through ESPHome's BLE tracker so it can coordinate
 scanning, concurrent clients, and Wi-Fi/Bluetooth radio priority.
 
@@ -40,6 +41,38 @@ sh tests/run-encryption.sh /path/to/xxtea-iot-crypt/src /path/to/python/site-pac
 
 Under a ptrace-based sandbox, set `ASAN_OPTIONS=detect_leaks=0`; address
 and undefined-behavior checks remain enabled.
+
+## Control reliability
+
+The component performs one GATT request at a time. Temperature and mode commands
+read the current payload, write the requested change, and read it back to verify
+what the thermostat accepted. Home Assistant receives observed values rather than
+optimistic acknowledgments. `auto` verification requires scheduled mode, not vacation mode.
+
+Repeated polls coalesce; the latest pending request for each setting wins. Controls
+run before routine polls, after any pairing prerequisite. A failed diagnostic read
+is skipped so it cannot discard an unrelated control. Connection, discovery, PIN,
+and request deadlines recover stalled sessions. Failed sessions get four retries
+with 2/4/8/16-second backoff, then discard pending work with a warning. Polls do not
+reset an active retry budget. A future poll or command starts a new batch.
+This is bounded retry, not a guarantee of delivery: check readback and warnings.
+
+Malformed packet lengths are rejected before parsing. PIN and key bytes are not
+logged. The Heating/Idle action remains an estimate from temperatures, not measured
+valve position. Bluetooth availability and thermostat wake-up time still limit latency.
+
+Host regression tests compile the real control, packet and encryption code with
+AddressSanitizer and UndefinedBehaviorSanitizer, using fake ESPHome/BLE boundaries:
+
+```sh
+sh tests/run-control.sh /path/to/xxtea-iot-crypt/src /path/to/python/site-packages
+```
+
+They cover readback verification, malformed packets, serialized requests, retained
+and superseded commands, polling coalescing, bounded retries during polling,
+disconnect recovery, missing discovery, late PIN replies, failed diagnostic reads,
+commands arriving during close, and pairing prerequisites. Hardware validation is
+separate; these tests cannot establish radio reliability or actual valve movement.
 
 The original upstream documentation follows. Its legacy configuration
 examples predate this branch's ESPHome version.
@@ -111,17 +144,14 @@ Danfoss Eco is using encrypted communication, which relies on the `secret_key`. 
 [01:25:01][I][app:029]: Running through setup()...
 [01:25:02][I][danfoss_eco:215]: [My Room eTRV] Short press Danfoss Eco hardware button NOW in order to allow reading the secret key
 ```
-If the button was not pressed in time, failure to retrieve the `secret_key` will be logged. Restart the ESP32 and try again.
+If the button was not pressed in time, failure to retrieve the `secret_key` will be logged. Press the button during a later connection attempt.
 ```
 [01:25:13][W][danfoss_eco:148]: [My Room eTRV] Danfoss Eco hardware button was not pressed, unable to read the secret key
 ```
 
-When component succeeds to read the `secret_key`, it will store the value in ESP32 flash, but it's recommended to explicitly add it to esphome component configuration.
-```
-[01:21:27][I][danfoss_eco:164]: [My Room eTRV] Consider adding below line to your danfoss_eco config:
-[01:21:27][I][danfoss_eco:165]: [My Room eTRV] secret_key: deadbeefcafebabedeadbeefcafebabe 
-[01:21:27][I][danfoss_eco:180]: [My Room eTRV] secret_key was saved to flash
-```
+When the component reads the `secret_key`, it stores it in ESP32 flash. This
+branch logs only whether the key was saved, never the key bytes. Keep any explicit
+key configuration in private ESPHome secrets.
 
 Configuration options
 ------------------------

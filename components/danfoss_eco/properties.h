@@ -44,12 +44,12 @@ namespace esphome
 
             DeviceProperty(shared_ptr<MyComponent> &component, shared_ptr<Xxtea> &xxtea, ESPBTUUID s_uuid, ESPBTUUID c_uuid) : component_(component), xxtea_(xxtea), service_uuid(s_uuid), characteristic_uuid(c_uuid) {}
 
-            virtual void update_state(uint8_t *value, uint16_t value_len){};
+            virtual bool update_state(uint8_t *value, uint16_t value_len) { return false; }
 
             virtual bool init_handle(BLEClient *);
             bool read_request(BLEClient *client);
 
-            uint16_t handle;
+            uint16_t handle{INVALID_HANDLE};
 
         protected:
             shared_ptr<MyComponent> component_{nullptr};
@@ -72,35 +72,35 @@ namespace esphome
         {
         public:
             BatteryProperty(shared_ptr<MyComponent> &component, shared_ptr<Xxtea> &xxtea) : DeviceProperty(component, xxtea, SERVICE_BATTERY, CHARACTERISTIC_BATTERY) {}
-            void update_state(uint8_t *value, uint16_t value_len) override;
+            bool update_state(uint8_t *value, uint16_t value_len) override;
         };
 
         class TemperatureProperty : public WritableProperty
         {
         public:
             TemperatureProperty(shared_ptr<MyComponent> &component, shared_ptr<Xxtea> &xxtea) : WritableProperty(component, xxtea, SERVICE_SETTINGS, CHARACTERISTIC_TEMPERATURE) {}
-            void update_state(uint8_t *value, uint16_t value_len) override;
+            bool update_state(uint8_t *value, uint16_t value_len) override;
         };
 
         class SettingsProperty : public WritableProperty
         {
         public:
             SettingsProperty(shared_ptr<MyComponent> &component, shared_ptr<Xxtea> &xxtea) : WritableProperty(component, xxtea, SERVICE_SETTINGS, CHARACTERISTIC_SETTINGS) {}
-            void update_state(uint8_t *value, uint16_t value_len) override;
+            bool update_state(uint8_t *value, uint16_t value_len) override;
         };
 
         class ErrorsProperty : public DeviceProperty
         {
         public:
             ErrorsProperty(shared_ptr<MyComponent> &component, shared_ptr<Xxtea> &xxtea) : DeviceProperty(component, xxtea, SERVICE_SETTINGS, CHARACTERISTIC_ERRORS) {}
-            void update_state(uint8_t *value, uint16_t value_len) override;
+            bool update_state(uint8_t *value, uint16_t value_len) override;
         };
 
         class SecretKeyProperty : public DeviceProperty
         {
         public:
             SecretKeyProperty(shared_ptr<MyComponent> &component, shared_ptr<Xxtea> &xxtea) : DeviceProperty(component, xxtea, SERVICE_SETTINGS, CHARACTERISTIC_SECRET_KEY) {}
-            void update_state(uint8_t *value, uint16_t value_len) override;
+            bool update_state(uint8_t *value, uint16_t value_len) override;
 
             bool init_handle(BLEClient *) override;
         };

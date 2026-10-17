@@ -15,6 +15,7 @@ namespace esphome
             char service_uuid[ble_device_base::UUID_STR_LEN];
             char characteristic_uuid[ble_device_base::UUID_STR_LEN];
             ESP_LOGV(TAG, "[%s] resolving handler for service=%s, characteristic=%s", this->component_->get_name().c_str(), this->service_uuid.to_str(service_uuid), this->characteristic_uuid.to_str(characteristic_uuid));
+            this->handle = INVALID_HANDLE;
             auto chr = client->get_characteristic(this->service_uuid, this->characteristic_uuid);
             if (chr == nullptr)
             {
@@ -28,6 +29,8 @@ namespace esphome
 
         bool DeviceProperty::read_request(BLEClient *client)
         {
+            if (this->handle == INVALID_HANDLE)
+                return false;
             auto status = esp_ble_gattc_read_char(client->get_gattc_if(),
                                                   client->get_conn_id(),
                                                   this->handle,
@@ -40,8 +43,10 @@ namespace esphome
 
         bool WritableProperty::write_request(BLEClient *client, uint8_t *data, uint16_t data_len)
         {
-            ESP_LOGD(TAG, "[%s] write_request: handle=%#04x, data=%s", this->component_->get_name().c_str(), this->handle, format_hex_pretty(data, data_len).c_str());
+            ESP_LOGD(TAG, "[%s] write_request: handle=%#04x, length=%u", this->component_->get_name().c_str(), this->handle, data_len);
 
+            if (this->handle == INVALID_HANDLE)
+                return false;
             auto status = esp_ble_gattc_write_char(client->get_gattc_if(),
                                                    client->get_conn_id(),
                                                    this->handle,
@@ -63,17 +68,21 @@ namespace esphome
             return this->write_request(client, buff, sizeof(buff));
         }
 
-        void BatteryProperty::update_state(uint8_t *value, uint16_t value_len)
+        bool BatteryProperty::update_state(uint8_t *value, uint16_t value_len)
         {
+            if (value == nullptr || value_len != 1 || value[0] > 100)
+                return false;
             uint8_t battery_level = value[0];
             ESP_LOGD(TAG, "[%s] battery level: %d %%", this->component_->get_name().c_str(), battery_level);
             if (this->component_->battery_level() != nullptr)
                 this->component_->battery_level()->publish_state(battery_level);
+            return true;
         }
 
-        void TemperatureProperty::update_state(uint8_t *value, uint16_t value_len)
+        bool TemperatureProperty::update_state(uint8_t *value, uint16_t value_len)
         {
             auto t_data = new TemperatureData(this->xxtea_, value, value_len);
+            if (!t_data->valid) { delete t_data; return false; }
             this->data.reset(t_data);
 
             ESP_LOGD(TAG, "[%s] Current room temperature: %2.1f°C, Set point temperature: %2.1f°C", this->component_->get_name().c_str(), t_data->room_temperature, t_data->target_temperature);
@@ -86,11 +95,13 @@ namespace esphome
             this->component_->target_temperature = t_data->target_temperature;
             this->component_->current_temperature = t_data->room_temperature;
             this->component_->publish_state();
+            return true;
         }
 
-        void SettingsProperty::update_state(uint8_t *value, uint16_t value_len)
+        bool SettingsProperty::update_state(uint8_t *value, uint16_t value_len)
         {
             auto s_data = new SettingsData(this->xxtea_, value, value_len);
+            if (!s_data->valid) { delete s_data; return false; }
             this->data.reset(s_data);
 
             const char *name = this->component_->get_name().c_str();
@@ -113,11 +124,13 @@ namespace esphome
             this->component_->set_visual_min_temperature_override(s_data->temperature_min);
             this->component_->set_visual_max_temperature_override(s_data->temperature_max);
             this->component_->publish_state();
+            return true;
         }
 
-        void ErrorsProperty::update_state(uint8_t *value, uint16_t value_len)
+        bool ErrorsProperty::update_state(uint8_t *value, uint16_t value_len)
         {
             auto e_data = new ErrorsData(this->xxtea_, value, value_len);
+            if (!e_data->valid) { delete e_data; return false; }
             this->data.reset(e_data);
 
             const char *name = this->component_->get_name().c_str();
@@ -130,6 +143,7 @@ namespace esphome
             // TODO: it would be great to add actual error code to binary_sensor state attributes, but I'm not sure how to achieve that
             if (this->component_->problems() != nullptr)
                 this->component_->problems()->publish_state(e_data->E9_VALVE_DOES_NOT_CLOSE || e_data->E10_INVALID_TIME || e_data->E14_LOW_BATTERY || e_data->E15_VERY_LOW_BATTERY);
+            return true;
         }
 
         bool SecretKeyProperty::init_handle(BLEClient *client)
@@ -140,6 +154,7 @@ namespace esphome
                 return true;
             }
 
+            this->handle = INVALID_HANDLE;
             auto chr = client->get_characteristic(this->service_uuid, this->characteristic_uuid);
             if (chr != nullptr)
             {
@@ -152,20 +167,16 @@ namespace esphome
             return false;
         }
 
-        void SecretKeyProperty::update_state(uint8_t *value, uint16_t value_len)
+        bool SecretKeyProperty::update_state(uint8_t *value, uint16_t value_len)
         {
-            if (value_len != SECRET_KEY_LENGTH)
+            if (value == nullptr || value_len != SECRET_KEY_LENGTH)
             {
                 ESP_LOGE(TAG, "[%s] Unexpected secret_key length: %d", this->component_->get_name().c_str(), value_len);
-                return;
+                return false;
             }
 
-            char key_str[SECRET_KEY_LENGTH * 2 + 1];
-            encode_hex(value, value_len, key_str);
-
-            ESP_LOGI(TAG, "[%s] Consider adding below line to your danfoss_eco config:", this->component_->get_name().c_str());
-            ESP_LOGI(TAG, "[%s] secret_key: %s", this->component_->get_name().c_str(), key_str);
             this->component_->set_secret_key(value, true);
+            return this->xxtea_->status() == XXTEA_STATUS_SUCCESS;
         }
 
     } // namespace danfoss_eco
