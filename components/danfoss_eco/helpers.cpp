@@ -78,11 +78,12 @@ namespace esphome
             uint8_t buffer[value_len], enc_buff[value_len];
             reverse_chunks(value, value_len, buffer);
 
-            auto xxtea_status = xxtea->encrypt(buffer, value_len, enc_buff, (size_t *)&value_len);
+            size_t encrypted_len = sizeof(enc_buff);
+            auto xxtea_status = xxtea->encrypt(buffer, value_len, enc_buff, &encrypted_len);
             if (xxtea_status != XXTEA_STATUS_SUCCESS)
                 ESP_LOGW(TAG, "xxtea_encrypt failed, status=%d", xxtea_status);
             else
-                reverse_chunks(enc_buff, value_len, value);
+                reverse_chunks(enc_buff, encrypted_len, value);
             return value;
         }
 

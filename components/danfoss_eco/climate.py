@@ -50,7 +50,7 @@ def validate_pin(value):
     return value
 
 CONFIG_SCHEMA = (
-    climate.CLIMATE_SCHEMA.extend(
+    climate.climate_schema(DanfossEco).extend(
         {
             cv.GenerateID(): cv.declare_id(DanfossEco),
             cv.Optional(CONF_SECRET_KEY): validate_secret,
@@ -68,7 +68,7 @@ CONFIG_SCHEMA = (
                 device_class=DEVICE_CLASS_TEMPERATURE,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
-            cv.Optional(CONF_PROBLEMS): binary_sensor.BINARY_SENSOR_SCHEMA.extend({
+            cv.Optional(CONF_PROBLEMS): binary_sensor.binary_sensor_schema().extend({
                 cv.Optional(CONF_NAME): cv.string,
                 cv.Optional(CONF_ENTITY_CATEGORY, default=ENTITY_CATEGORY_DIAGNOSTIC): cv.entity_category,
                 cv.Optional(CONF_DEVICE_CLASS, default=DEVICE_CLASS_PROBLEM): binary_sensor.validate_device_class
@@ -80,6 +80,8 @@ CONFIG_SCHEMA = (
 )
 
 async def to_code(config):
+    # Thermostat limits are read over BLE and applied at runtime.
+    cg.add_define("USE_CLIMATE_VISUAL_OVERRIDES")
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await climate.register_climate(var, config)

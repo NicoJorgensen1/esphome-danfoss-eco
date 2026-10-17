@@ -1,5 +1,7 @@
 #pragma once
 
+#include <queue>
+
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
 
 #include "properties.h"
@@ -35,10 +37,24 @@ namespace esphome
             }
         };
 
-        class CommandQueue : public esphome::esp32_ble_tracker::Queue<Command>
+        class CommandQueue
         {
         public:
+            void push(Command *command) { this->q_.push(command); }
+
+            Command *pop()
+            {
+                if (this->q_.empty())
+                    return nullptr;
+                Command *command = this->q_.front();
+                this->q_.pop();
+                return command;
+            }
+
             bool is_empty() { return this->q_.empty(); }
+
+        private:
+            std::queue<Command *> q_;
         };
 
     } // namespace danfoss_eco

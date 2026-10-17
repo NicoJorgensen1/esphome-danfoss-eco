@@ -67,7 +67,9 @@ namespace esphome
 
     void Device::control(const ClimateCall &call)
     {
-      if (call.get_target_temperature().has_value())
+      if (call.get_target_temperature().has_value() && !this->p_temperature->data)
+        ESP_LOGW(TAG, "[%s] ignoring temperature command until the first successful read", this->get_name().c_str());
+      else if (call.get_target_temperature().has_value())
       {
         TemperatureData &t_data = (TemperatureData &)(*this->p_temperature->data);
         t_data.target_temperature = *call.get_target_temperature();
@@ -77,7 +79,9 @@ namespace esphome
         this->connect();
       }
 
-      if (call.get_mode().has_value())
+      if (call.get_mode().has_value() && !this->p_settings->data)
+        ESP_LOGW(TAG, "[%s] ignoring mode command until the first successful read", this->get_name().c_str());
+      else if (call.get_mode().has_value())
       {
         SettingsData &s_data = (SettingsData &)(*this->p_settings->data);
         s_data.device_mode = *call.get_mode();
@@ -222,7 +226,7 @@ namespace esphome
       }
       // gap scanning interferes with connection attempts, which results in esp_gatt_status_t::ESP_GATT_ERROR (0x85)
       esp_ble_gap_stop_scanning();
-      this->parent()->set_state(ClientState::READY_TO_CONNECT); // this will cause ble_client to attempt connect() from its loop()
+      this->parent()->connect();
     }
 
     void Device::disconnect()

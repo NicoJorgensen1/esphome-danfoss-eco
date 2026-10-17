@@ -1,0 +1,56 @@
+# Compile fixture only: dummy Wi-Fi credentials, addresses and keys.
+esphome:
+  name: danfoss-compile-test
+  min_version: 2026.9.1
+  compile_process_limit: 1
+  libraries:
+    - xxtea-iot-crypt@2.0.1
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+  level: INFO
+wifi:
+  ssid: compile-test-only
+  password: not-a-real-password
+api:
+ota:
+  - platform: esphome
+external_components:
+  - source:
+      type: local
+      path: ../components
+esp32_ble:
+  max_connections: 2
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+ble_client:
+  - mac_address: '00:04:2F:00:00:01'
+    id: thermostat_one
+  - mac_address: '00:04:2F:00:00:02'
+    id: thermostat_two
+climate:
+  - platform: danfoss_eco
+    name: Test Thermostat One
+    ble_client_id: thermostat_one
+    secret_key: '00000000000000000000000000000000'
+    update_interval: 15min
+    temperature:
+      name: Test Temperature One
+    battery_level:
+      name: Test Battery One
+    problems:
+      name: Test Problems One
+  - platform: danfoss_eco
+    name: Test Thermostat Two
+    ble_client_id: thermostat_two
+    secret_key: '00000000000000000000000000000000'
+    update_interval: 16min
+    temperature:
+      name: Test Temperature Two
+    battery_level:
+      name: Test Battery Two
+    problems:
+      name: Test Problems Two

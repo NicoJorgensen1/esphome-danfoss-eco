@@ -1,6 +1,43 @@
 Danfoss Eco
 =============
 
+## ESPHome 2026.9 baseline
+
+This branch starts from upstream `v1.1.4` (`1bc9622`) and adapts its
+climate schema, traits, BLE connection, command queue, UUID formatting,
+and runtime temperature limits to ESPHome **2026.9.1**, using the Arduino
+framework on `esp32dev`. It also corrects an out-of-bounds access in the
+encryption helper's output-length argument and preserves the full 16-byte
+settings payload when changing mode. Commands arriving before the first
+successful thermostat read are ignored with a warning.
+
+It retains upstream manual (`heat`) and scheduled (`auto`, “døgnrytme”)
+operation. It does not include the previous fork's presets or minute-slot
+polling. Keep Wi-Fi credentials and thermostat keys in private ESPHome
+configuration and `secrets.yaml`, outside this repository.
+
+`tests/compile.yaml` exercises two thermostats with dummy credentials;
+use it only for configuration validation and compilation:
+
+```sh
+esphome config tests/compile.yaml
+esphome compile tests/compile.yaml
+```
+
+The encryption and schedule-settings regression test compiles the real component helper and
+the `xxtea-iot-crypt` 2.0.1 implementation with address and undefined-behavior
+sanitizers. Only hardware headers and logging are replaced for the host test:
+
+```sh
+sh tests/run-encryption.sh /path/to/xxtea-iot-crypt/src /path/to/python/site-packages
+```
+
+Under a ptrace-based sandbox, set `ASAN_OPTIONS=detect_leaks=0`; address
+and undefined-behavior checks remain enabled.
+
+The original upstream documentation follows. Its legacy configuration
+examples predate this branch's ESPHome version.
+
 The ``danfoss_eco`` climate platform creates a climate device which can be used to control a Danfoss Eco eTRV.
 
 This component supports the following functionality:
