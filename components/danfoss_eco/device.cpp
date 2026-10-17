@@ -233,7 +233,7 @@ namespace esphome
         if (this->in_flight_->type == CommandType::READ && this->in_flight_->property != this->p_secret_key)
         {
           // An explicit failure of one poll must not discard unrelated controls.
-          ESP_LOGW(TAG, "[%s] skipping failed poll, handle=%#04x", this->get_name().c_str(), param.handle);
+          ESP_LOGW(TAG, "[%s] skipping failed poll, handle=%#04x, status=%u, length=%u", this->get_name().c_str(), param.handle, param.status, param.value_len);
           this->status_set_warning();
           this->in_flight_.reset();
           return;

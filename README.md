@@ -57,7 +57,10 @@ with 2/4/8/16-second backoff, then discard pending work with a warning. Polls do
 reset an active retry budget. A future poll or command starts a new batch.
 This is bounded retry, not a guarantee of delivery: check readback and warnings.
 
-Malformed packet lengths are rejected before parsing. PIN and key bytes are not
+Malformed packet lengths are rejected before parsing. A thermostat may return
+inconsistent temperature limits (observed raw minimum/maximum 100/68). These do
+not invalidate its mode: retain its original settings bytes, warn, and use visual
+bounds of 5–35°C. Those fallback bounds are not confirmed device capabilities. PIN and key bytes are not
 logged. The Heating/Idle action remains an estimate from temperatures, not measured
 valve position. Bluetooth availability and thermostat wake-up time still limit latency.
 
@@ -71,7 +74,8 @@ sh tests/run-control.sh /path/to/xxtea-iot-crypt/src /path/to/python/site-packag
 They cover readback verification, malformed packets, serialized requests, retained
 and superseded commands, polling coalescing, bounded retries during polling,
 disconnect recovery, missing discovery, late PIN replies, failed diagnostic reads,
-commands arriving during close, and pairing prerequisites. Hardware validation is
+commands arriving during close, pairing prerequisites, and the observed inconsistent
+temperature-limit fields. Hardware validation is
 separate; these tests cannot establish radio reliability or actual valve movement.
 
 The original upstream documentation follows. Its legacy configuration

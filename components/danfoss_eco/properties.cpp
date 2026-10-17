@@ -121,8 +121,20 @@ namespace esphome
 
             // apply read configuration to the component
             this->component_->mode = s_data->device_mode;
-            this->component_->set_visual_min_temperature_override(s_data->temperature_min);
-            this->component_->set_visual_max_temperature_override(s_data->temperature_max);
+            if (s_data->temperature_min >= 5.0f && s_data->temperature_min < s_data->temperature_max && s_data->temperature_max <= 35.0f)
+            {
+                this->component_->set_visual_min_temperature_override(s_data->temperature_min);
+                this->component_->set_visual_max_temperature_override(s_data->temperature_max);
+            }
+            else
+            {
+                // Some real devices return inconsistent limits. Keep their valid
+                // mode and original payload; these are UI bounds, not a repair of
+                // the thermostat's settings or a claim about its capabilities.
+                ESP_LOGW(TAG, "[%s] inconsistent temperature limits %.1f/%.1f; using visual bounds 5/35", name, s_data->temperature_min, s_data->temperature_max);
+                this->component_->set_visual_min_temperature_override(5.0f);
+                this->component_->set_visual_max_temperature_override(35.0f);
+            }
             this->component_->publish_state();
             return true;
         }

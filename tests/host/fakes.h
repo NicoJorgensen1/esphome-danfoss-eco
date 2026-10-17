@@ -70,7 +70,8 @@ class Climate {
  ClimateMode mode=CLIMATE_MODE_AUTO; float target_temperature=NAN,current_temperature=NAN;
  ClimateAction action=ClimateAction::CLIMATE_ACTION_IDLE; int publications=0;
  const std::string& get_name()const{static std::string s="Test";return s;}
- void publish_state(){++publications;} void set_visual_min_temperature_override(float){} void set_visual_max_temperature_override(float){}
+ float visual_min=10,visual_max=30;
+ void publish_state(){++publications;} void set_visual_min_temperature_override(float v){visual_min=v;} void set_visual_max_temperature_override(float v){visual_max=v;}
  protected: virtual void control(const ClimateCall&){}
 };
 }

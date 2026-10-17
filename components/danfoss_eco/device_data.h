@@ -101,8 +101,11 @@ namespace esphome
                 if (settings == nullptr)
                     return;
                 this->wire_mode = (DeviceMode)settings[4];
-                if ((wire_mode != MANUAL && wire_mode != SCHEDULED && wire_mode != VACATION && wire_mode != HOLD) || settings[1] > settings[2])
+                if (wire_mode != MANUAL && wire_mode != SCHEDULED && wire_mode != VACATION && wire_mode != HOLD)
+                {
+                    ESP_LOGW(TAG, "Rejected settings: mode=%u, minimum=%u, maximum=%u", settings[4], settings[1], settings[2]);
                     return;
+                }
 
                 this->settings_ = (uint8_t *)malloc(length);
                 if (this->settings_ == nullptr)

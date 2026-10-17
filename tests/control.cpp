@@ -157,6 +157,20 @@ int main(int argc,char **argv){
   assert(fake::requests.back().handle==unpaired->temperature_handle());
   unpaired->ordinary_read(unpaired->temperature_handle());unpaired->loop();
   assert(fake::requests.back().write);assert(unpaired->plaintext(fake::requests.back())[0]==44);
+ }else if(test=="inconsistent-limits-preserve-mode"){
+  // Real basement reply: length16, status0, scheduled mode1, min100/max68.
+  // Bad limits must not hide a valid mode or be changed by a mode command.
+  d->mode=CLIMATE_MODE_HEAT;d->control({{},CLIMATE_MODE_AUTO});d->loop();
+  std::vector<uint8_t> observed={0x44,100,68,10,1,16,0,0,0,0,0,0,0,0,0,0};
+  d->packet(d->settings_handle(),observed);
+  assert(d->mode==CLIMATE_MODE_AUTO);assert(d->visual_min<d->visual_max);
+  d->loop();assert(fake::requests.back().write);
+  assert(d->plaintext(fake::requests.back())==observed);
+  d->ack(d->settings_handle());d->loop();d->packet(d->settings_handle(),observed);
+  assert(!d->warning);assert(!d->timers.count("retry"));
+  d->control({{},CLIMATE_MODE_HEAT});d->loop();d->packet(d->settings_handle(),observed);d->loop();
+  auto expected=observed;expected[4]=0;
+  assert(d->plaintext(fake::requests.back())==expected);
  }else return 2;
  std::cout<<test<<": passed\n";
 }
