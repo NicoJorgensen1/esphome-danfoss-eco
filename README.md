@@ -10,11 +10,17 @@ framework on `esp32dev`. It also corrects an out-of-bounds access in the
 encryption helper's output-length argument and preserves the full 16-byte
 settings payload when changing mode. Commands arriving before the first
 successful thermostat read are ignored with a warning.
+Connection requests go through ESPHome's BLE tracker so it can coordinate
+scanning, concurrent clients, and Wi-Fi/Bluetooth radio priority.
 
 It retains upstream manual (`heat`) and scheduled (`auto`, “døgnrytme”)
 operation. It does not include the previous fork's presets or minute-slot
 polling. Keep Wi-Fi credentials and thermostat keys in private ESPHome
 configuration and `secrets.yaml`, outside this repository.
+
+For a thermostat that repeatedly fails to connect, `auto_connect: false` on
+its `ble_client` prevents continuous advertisement-driven retries. Configured
+polls and climate commands still request a connection through the tracker.
 
 `tests/compile.yaml` exercises two thermostats with dummy credentials;
 use it only for configuration validation and compilation:

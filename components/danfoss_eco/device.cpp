@@ -211,7 +211,14 @@ namespace esphome
 
     void Device::connect()
     {
-      if (this->node_state == ClientState::INIT || this->node_state == ClientState::ESTABLISHED)
+      // A command can arrive before the preceding connection finishes closing.
+      // Keep it queued and reconnect once the controller has released the link.
+      if (this->parent()->state() == ClientState::DISCONNECTING)
+      {
+        this->set_timeout("reconnect", 250, [this]() { this->connect(); });
+        return;
+      }
+      if (this->parent()->state() != ClientState::IDLE)
       {
         return;
       }
@@ -224,9 +231,9 @@ namespace esphome
         ESP_LOGD(TAG, "[%s] re-enabling ble_client", this->get_name().c_str());
         parent()->set_enabled(true);
       }
-      // gap scanning interferes with connection attempts, which results in esp_gatt_status_t::ESP_GATT_ERROR (0x85)
-      esp_ble_gap_stop_scanning();
-      this->parent()->connect();
+      // Let the tracker stop scanning, serialize connection attempts, and
+      // prioritize Bluetooth over Wi-Fi before it opens the connection.
+      this->parent()->set_state(ClientState::DISCOVERED);
     }
 
     void Device::disconnect()
