@@ -58,7 +58,7 @@ namespace esphome
         this->batch_active_ = true;
         this->retries_ = 0;
         if (this->node_state != ClientState::ESTABLISHED)
-          this->set_timeout("session", 60000, [this]() { this->fail_session("connection setup timed out"); });
+          this->set_timeout("session", this->connection_setup_timeout_, [this]() { this->fail_session("connection setup timed out"); });
       }
       if (!this->recovering_)
         this->connect();
@@ -227,7 +227,7 @@ namespace esphome
         if (this->expire_controls())
           return;
         this->recovering_ = false;
-        this->set_timeout("session", 60000, [this]() { this->fail_session("connection setup timed out"); });
+        this->set_timeout("session", this->connection_setup_timeout_, [this]() { this->fail_session("connection setup timed out"); });
         this->connect();
       });
     }

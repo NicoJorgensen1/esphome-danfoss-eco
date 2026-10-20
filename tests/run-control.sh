@@ -14,4 +14,7 @@ result=0
 for test in confirmed-mode short-settings one-request pending-target transient-pin request-deadline rejected-request verify-mode latest-target poll-coalescing disconnect-recovery newer-request-survives-retry bounded-retries unexpected-response mismatched-readback vacation-is-not-schedule poll-does-not-reset-retries discovery-deadline late-pin-response failed-poll-does-not-lose-control control-during-normal-close pairing-precedes-control inconsistent-limits-preserve-mode control-survives-five-failures expired-control-never-writes poll-cannot-extend-control-deadline delivery-status-readback custom-timeout-sticky-failure expiry-prepare expiry-write expiry-verify expiry-backoff expiry-connecting newer-request-has-own-deadline superseded-readback-cannot-confirm independent-setting-deadlines millis-wraparound capped-control-backoff invalid-call-is-atomic thermostats-have-independent-deadlines callback-replaces-verifying-command callback-expires-verifying-command new-request-publishes-after-acceptance; do
  "$build/control" "$test" || result=1
 done
+for test in queued-setup-can-complete-after-one-minute custom-setup-watchdog-recovers retry-preserves-custom-setup-budget control-deadline-bounds-longer-setup; do
+ "$build/control" "$test" || result=1
+done
 exit "$result"

@@ -38,6 +38,7 @@ climate:
     secret_key: '00000000000000000000000000000000'
     update_interval: 15min
     command_timeout: 10min
+    connection_setup_timeout: 150s
     command_status:
       name: Test Command Delivery One
     temperature:

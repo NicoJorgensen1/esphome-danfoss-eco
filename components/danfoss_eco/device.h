@@ -50,6 +50,7 @@ namespace esphome
       void set_secret_key(const string &);
       void set_pin_code(const string &);
       void set_command_timeout(uint32_t timeout) { command_timeout_ = timeout; }
+      void set_connection_setup_timeout(uint32_t timeout) { connection_setup_timeout_ = timeout; }
       void set_command_status(text_sensor::TextSensor *sensor) { command_status_ = sensor; }
 
     protected:
@@ -89,6 +90,7 @@ namespace esphome
       std::map<const DeviceProperty *, PendingControl> pending_controls_;
       uint64_t next_delivery_id_{0};
       uint32_t command_timeout_{900000};
+      uint32_t connection_setup_timeout_{60000};
       text_sensor::TextSensor *command_status_{nullptr};
       const char *last_command_status_{nullptr};
       bool delivery_seen_{false};

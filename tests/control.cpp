@@ -27,6 +27,12 @@ class TestDevice:public Device {
   esp_ble_gattc_cb_param_t p;gattc_event_handler(ESP_GATTC_DISCONNECT_EVT,1,&p);
  }
  void recover(){parent()->set_state(ClientState::IDLE);fire("retry");establish();}
+ // Advance a newly armed session timer as ESPHome's scheduler would.
+ void elapse_session(uint32_t ms){
+  fake::now+=ms;
+  if(timers.count("session") && delays.at("session")<=ms)fire("session");
+  loop();
+ }
  void ordinary_read(uint16_t handle){
   if(handle==p_battery->handle)packet(handle,{73});
   else if(handle==p_temperature->handle)packet(handle,{38,38,0,0,0,0,0,0});
@@ -293,6 +299,29 @@ int main(int argc,char **argv){
   bool transient_failure=false;delivery.on_state=[&](){if(delivery.state=="failed")transient_failure=true;};
   d->control({22.0f,{}});
   assert(!transient_failure && delivery.state=="pending");
+ }else if(test=="queued-setup-can-complete-after-one-minute"){
+  d->set_connection_setup_timeout(150000);c.set_state(ClientState::IDLE);
+  d->control({{},CLIMATE_MODE_AUTO});d->elapse_session(90000);
+  assert(!d->warning && c.enabled && delivery.state=="pending");
+  d->establish();d->loop();d->ordinary_read(d->settings_handle());d->loop();
+  d->ack(d->settings_handle());d->loop();d->ordinary_read(d->settings_handle());
+  assert(delivery.state=="confirmed" && d->mode==CLIMATE_MODE_AUTO);
+ }else if(test=="custom-setup-watchdog-recovers"){
+  d->set_connection_setup_timeout(150000);c.set_state(ClientState::IDLE);
+  d->control({{},CLIMATE_MODE_AUTO});d->elapse_session(150000);
+  assert(d->warning && !c.enabled && d->timers.count("retry"));
+  assert(delivery.state=="pending");
+ }else if(test=="retry-preserves-custom-setup-budget"){
+  d->set_connection_setup_timeout(150000);c.set_state(ClientState::IDLE);
+  d->control({{},CLIMATE_MODE_AUTO});d->fire("session");
+  c.set_state(ClientState::IDLE);d->fire("retry");d->status_clear_warning();
+  d->elapse_session(90000);
+  assert(!d->warning && c.enabled && delivery.state=="pending");
+ }else if(test=="control-deadline-bounds-longer-setup"){
+  d->set_connection_setup_timeout(150000);d->set_command_timeout(60000);
+  c.set_state(ClientState::IDLE);d->control({{},CLIMATE_MODE_AUTO});
+  d->elapse_session(60000);
+  assert(delivery.state=="failed" && !c.enabled && fake::requests.empty());
  }else return 2;
  std::cout<<test<<": passed\n";
 }

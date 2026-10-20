@@ -31,6 +31,13 @@ CONF_SECRET_KEY = 'secret_key'
 CONF_PROBLEMS = 'problems'
 CONF_COMMAND_TIMEOUT = 'command_timeout'
 CONF_COMMAND_STATUS = 'command_status'
+CONF_CONNECTION_SETUP_TIMEOUT = 'connection_setup_timeout'
+
+def validate_connection_setup_timeout(value):
+    value = cv.positive_time_period_milliseconds(value)
+    if not 1000 <= value.total_milliseconds <= 600000:
+        raise cv.Invalid("connection_setup_timeout must be between 1s and 10min")
+    return value
 
 def validate_command_timeout(value):
     value = cv.positive_time_period_milliseconds(value)
@@ -64,6 +71,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_SECRET_KEY): validate_secret,
             cv.Optional(CONF_PIN_CODE): validate_pin,
             cv.Optional(CONF_COMMAND_TIMEOUT, default="15min"): validate_command_timeout,
+            cv.Optional(CONF_CONNECTION_SETUP_TIMEOUT, default="60s"): validate_connection_setup_timeout,
             cv.Optional(CONF_COMMAND_STATUS): text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
                 icon="mdi:message-check-outline",
@@ -103,6 +111,7 @@ async def to_code(config):
     cg.add(var.set_secret_key(config.get(CONF_SECRET_KEY, "")))
     cg.add(var.set_pin_code(config.get(CONF_PIN_CODE, "")))
     cg.add(var.set_command_timeout(config[CONF_COMMAND_TIMEOUT]))
+    cg.add(var.set_connection_setup_timeout(config[CONF_CONNECTION_SETUP_TIMEOUT]))
     if CONF_COMMAND_STATUS in config:
         status = await text_sensor.new_text_sensor(config[CONF_COMMAND_STATUS])
         cg.add(var.set_command_status(status))

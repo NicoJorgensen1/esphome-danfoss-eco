@@ -76,6 +76,14 @@ If one setting expires while another is pending, status stays `pending`, then
 becomes `failed` when the remaining setting finishes. This sensor describes
 command delivery, not continuous connectivity or the thermostat's Problems flag.
 
+The separate `connection_setup_timeout` defaults to `60s` and accepts `1s` to
+`10min`. It includes time waiting behind other BLE clients as well as opening
+the link. If `esp32_ble.connection_timeout` is increased (for example, to `40s`),
+allow enough setup time for all clients sharing the board (for example,
+`connection_setup_timeout: 150s` for three clients). This does not extend
+`command_timeout`; expired controls still fail and stop retrying. Once the link
+opens, discovery/authentication and individual requests retain their own deadlines.
+
 An expired command is removed and cannot start further writes. A write already
 sent cannot be retracted: `failed` means **not confirmed before the deadline**, not
 proof that the thermostat did nothing. Pending commands are held in RAM and are
@@ -94,6 +102,8 @@ AddressSanitizer and UndefinedBehaviorSanitizer, using fake ESPHome/BLE boundari
 
 ```sh
 sh tests/run-control.sh /path/to/xxtea-iot-crypt/src /path/to/python/site-packages
+PYTHONPATH=. python tests/config.py
+PYTHONPATH=. python tests/setup-timeout.py
 ```
 
 They cover readback verification, malformed packets, serialized requests, retained
